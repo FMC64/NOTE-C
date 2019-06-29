@@ -8,7 +8,8 @@ void CCompiler(char *path)
 
 	free(path_real);
 	if (file < 0)
-		fx_error(file, path);
+		fx_error(file, NULL);
+	fx_assert(Bfile_CloseFile(file), path);
 	while (!IsKeyDown(KEY_CTRL_EXIT))
 	{
 		ML_clear_vram();

@@ -25,7 +25,7 @@
 
 int AddIn_main(int isAppli, unsigned short OptionNum)
 {
-	CCompiler("test.c");
+	CCompiler("\\\\fls0\\TEST.c");
 	return 1;
 }
 
