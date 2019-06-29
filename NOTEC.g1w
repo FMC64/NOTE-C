@@ -2,7 +2,7 @@
 Name=NOTEC
 Version=0.1
 Model=:fx-9860G.dlm
-SourcePath=SRC
+SourcePath=src
 MemoryPath=INIT
 MemCardPath=SDCard
 
@@ -13,3 +13,6 @@ LoadAddress=80000000:90100000
 
 [Files]
 SourceFile=:src\main.c
+SourceFile=:src\MonochromeLib.c
+SourceFile=:src\compiler.c
+SourceFile=:src\io.c

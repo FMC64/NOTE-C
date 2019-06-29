@@ -7,8 +7,8 @@
 /*   Copyright (c) 2006 CASIO COMPUTER CO., LTD.                 */
 /*                                                               */
 /*****************************************************************/
-#include "fxlib.h"
 
+#include "headers.h"
 
 //****************************************************************************
 //  AddIn_main (Sample program main function)
@@ -22,22 +22,11 @@
 //  retval  :   1 = No error / 0 = Error
 //
 //****************************************************************************
+
 int AddIn_main(int isAppli, unsigned short OptionNum)
 {
-    unsigned int key;
-
-    Bdisp_AllClr_DDVRAM();
-
-    locate(1,4);
-    Print((unsigned char*)"This application is");
-    locate(1,5);
-    Print((unsigned char*)" sample Add-In.");
-
-    while(1){
-        GetKey(&key);
-    }
-
-    return 1;
+	CCompiler("test.c");
+	return 1;
 }
 
 
