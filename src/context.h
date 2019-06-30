@@ -13,3 +13,4 @@ static Context Context_init(const char *file, int line)
 #define Context_build Context_init(__FILE__, __LINE__)
 
 void Context_print(Context ctx, int *y);
+void Context_print_term(Context ctx);

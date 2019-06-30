@@ -6,12 +6,13 @@ int printf(const char *fmt, ...)
 {
 	char buf[1024];
 	va_list args;
+	int res;
 
 	va_start(args, fmt);
-	vsprintf(buf, fmt, args);
+	res = vsprintf(buf, fmt, args);
 	Print((unsigned char*)buf);
 	va_end(args);
-	return 0;
+	return res;
 }
 
 FONTCHARACTER* string_to_fontchar(const char *src)
@@ -129,36 +130,18 @@ static const char* IML_FILLEERR_string(int code)
 
 void fx_error_real(int code, const char *context, Context ctx)
 {
-	int y;
+	terminal_flush();
 
-	while (IsKeyDown(KEY_CTRL_EXIT));
-	while (!IsKeyDown(KEY_CTRL_EXIT))
-	{
-		ML_clear_vram();
+	printf_term("ERROR\n\n");
+	Context_print_term(ctx);
+	printf_term("Code: %s\n", IML_FILLEERR_string(code));
+	if (context == NULL)
+		printf_term("No further info.");
+	else
+		printf_term("%s", context);
 
-		y = 1;
-		locate(1, y);
-		y += 2;
-		printf("ERROR");
-		locate(1, y++);
-		printf(file_shortpath(ctx.file));
-		locate(1, y++);
-		y++;
-		printf("Line %d", ctx.line);
-		locate(1, y++);
-		printf("Code:");
-		locate(1, y++);
-		printf("%s", IML_FILLEERR_string(code));
-		locate(1, y++);
-		if (context == NULL)
-			printf("No further info.");
-		else
-			printf("%s", context);
-
-		ML_display_vram();
-		Sleep(100);
-	}
-	abort(0);
+	terminal_show();
+	exit(0);
 }
 
 void fx_assert_real(int code, const char *context, Context ctx)

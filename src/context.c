@@ -7,3 +7,9 @@ void Context_print(Context ctx, int *y)
 	locate(1, (*y)++);
 	printf("Line %d", ctx.line);
 }
+
+void Context_print_term(Context ctx)
+{
+	printf_term("File: %s\n", file_shortpath(ctx.file));
+	printf_term("Line: %d\n", ctx.line);
+}

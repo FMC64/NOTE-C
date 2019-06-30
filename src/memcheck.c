@@ -1,24 +1,5 @@
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <math.h>
-
-#ifndef M_PI
-#define M_PI (float)3.14159265358979323846
-#endif
-
-#include <fxlib.h>
-
-#include "MonochromeLib.h"
-
-#include "struct.h"
-
-#include "memcheck.h"
-#include "string.h"
-#include "io.h"
-#include "compiler.h"
+#include "headers_ac.h"
 
 static MemcheckBlock MemcheckBlock_init(void *ptr, Context ctx)
 {
@@ -63,7 +44,6 @@ static void VecMemcheckBlock_remove(VecMemcheckBlock *vec, size_t ndx)
 static void VecMemcheckBlock_free(VecMemcheckBlock *vec, void *ptr, Context ctx)
 {
 	size_t i;
-	int y;
 
 	if (ptr == NULL)
 		return;
@@ -73,33 +53,17 @@ static void VecMemcheckBlock_free(VecMemcheckBlock *vec, void *ptr, Context ctx)
 			return;
 		}
 	}
-	while (IsKeyDown(KEY_CTRL_EXIT));
-	while (!IsKeyDown(KEY_CTRL_EXIT))
-	{
-		ML_clear_vram();
 
-		y = 1;
+	terminal_flush();
 
-		locate(1, y++);
-		printf("malloc error:");
-		locate(1, y++);
-		printf("block not found");
-		locate(1, y++);
-		printf("Can't free %p", ptr);
-		locate(1, y++);
-		Context_print(ctx, &y);
+	printf_term("malloc error: block not found\n");
+	printf_term("Can't free %p\n", ptr);
+	Context_print_term(ctx);
+	printf_term("%d blocks allocated\n\n", vec->count);
+	printf_term("Press EXIT to continue");
 
-		locate(1, y++);
-		printf("%d blocks", vec->count);
-		locate(1, y++);
-		printf("Press EXIT");
-		locate(1, y++);
-		printf("to continue");
-
-		ML_display_vram();
-		Sleep(100);
-	}
-	abort(0);
+	terminal_show();
+	exit(1);
 }
 
 static void VecMemcheckBlock_destroy(VecMemcheckBlock blocks)
@@ -144,35 +108,15 @@ void memcheck_free(void *ptr, Context ctx)
 
 void memcheck_recap(void)
 {
-	int y;
-
-	while (IsKeyDown(KEY_CTRL_EXIT));
-	while (!IsKeyDown(KEY_CTRL_EXIT))
-	{
-		ML_clear_vram();
-
-		y = 1;
-		if (blocks.count == 0) {
-			locate(1, y++);
-			printf("malloc OK");
-		} else {
-			locate(1, y++);
-			printf("malloc error:");
-			locate(1, y++);
-			printf("net %d blocks", blocks.count);
-			locate(1, y++);
-			printf("allocated");
-		}
-
-		y++;
-		locate(1, y++);
-		printf("Press EXIT");
-		locate(1, y++);
-		printf("to continue");
-
-		ML_display_vram();
-		Sleep(100);
+	terminal_flush();
+	if (blocks.count == 0)
+		printf_term("malloc OK\n\n");
+	else {
+		printf_term("malloc error:\n");
+		printf_term("net %d blocks allocated\n\n", blocks.count);
 	}
+	printf_term("Press EXIT to continue");
+	terminal_show();
 	VecMemcheckBlock_destroy(blocks);
 	return;
 }

@@ -23,16 +23,26 @@
 //
 //****************************************************************************
 
+static status = 1;
+static jmp_buf main_end;
+
 int AddIn_main(int isAppli, unsigned short OptionNum)
 {
-	CCompiler("\\\\fls0\\TEST.c");
-	#ifdef MEMCHECK
-	memcheck_recap();
-	#endif
-	return 1;
+	if (setjmp(main_end) == 0) {
+		CCompiler("\\\\fls0\\TEST.c");
+		terminal_flush();
+		#ifdef MEMCHECK
+		memcheck_recap();
+		#endif
+	}
+	return status;
 }
 
-
+void exit(int code)
+{
+	status = code;
+	longjmp(main_end, 1);
+}
 
 
 //****************************************************************************
