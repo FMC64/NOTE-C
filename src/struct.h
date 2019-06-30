@@ -1,4 +1,6 @@
 
 #pragma once
 
-#include "struct_compiler.h"
+#include "context_struct.h"
+#include "memcheck_struct.h"
+#include "compiler_struct.h"

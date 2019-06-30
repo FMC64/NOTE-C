@@ -8,8 +8,9 @@ typedef struct {
 } VecStr;
 
 typedef struct {
-	VecStr tokens;
+	char *input_file_path;
 	int input_file;
+	VecStr tokens;
 } CBuf;
 
 typedef struct {

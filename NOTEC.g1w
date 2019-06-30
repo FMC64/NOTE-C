@@ -17,3 +17,5 @@ SourceFile=:src\MonochromeLib.c
 SourceFile=:src\compiler.c
 SourceFile=:src\io.c
 SourceFile=:src\string.c
+SourceFile=:src\memcheck.c
+SourceFile=:src\context.c

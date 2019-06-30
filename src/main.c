@@ -26,6 +26,9 @@
 int AddIn_main(int isAppli, unsigned short OptionNum)
 {
 	CCompiler("\\\\fls0\\TEST.c");
+	#ifdef MEMCHECK
+	memcheck_recap();
+	#endif
 	return 1;
 }
 

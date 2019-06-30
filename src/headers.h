@@ -1,6 +1,10 @@
 
 #pragma once
 
+
+#define MEMCHECK
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -17,6 +21,8 @@
 
 #include "struct.h"
 
+#include "context.h"
+#include "memcheck.h"
 #include "string.h"
 #include "io.h"
 #include "compiler.h"

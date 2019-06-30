@@ -1,6 +1,7 @@
 
 #include "headers.h"
 
+// Unsafe function, to use with care and never let any uncontrolled user input go there
 int printf(const char *fmt, ...)
 {
 	char buf[1024];
@@ -25,7 +26,7 @@ FONTCHARACTER* string_to_fontchar(const char *src)
 	return res;
 }
 
-static const char* get_file_shortpath(const char *src)
+const char* file_shortpath(const char *src)
 {
 	size_t i = strlen(src);
 
@@ -126,10 +127,11 @@ static const char* IML_FILLEERR_string(int code)
 	}
 }
 
-void fx_error_real(int code, char *context, char *file, int line)
+void fx_error_real(int code, const char *context, Context ctx)
 {
 	int y;
 
+	while (IsKeyDown(KEY_CTRL_EXIT));
 	while (!IsKeyDown(KEY_CTRL_EXIT))
 	{
 		ML_clear_vram();
@@ -139,10 +141,10 @@ void fx_error_real(int code, char *context, char *file, int line)
 		y += 2;
 		printf("ERROR");
 		locate(1, y++);
-		printf(get_file_shortpath(file));
+		printf(file_shortpath(ctx.file));
 		locate(1, y++);
 		y++;
-		printf("Line %d", line);
+		printf("Line %d", ctx.line);
 		locate(1, y++);
 		printf("Code:");
 		locate(1, y++);
@@ -159,8 +161,8 @@ void fx_error_real(int code, char *context, char *file, int line)
 	abort(0);
 }
 
-void fx_assert_real(int code, char *context, char *file, int line)
+void fx_assert_real(int code, const char *context, Context ctx)
 {
 	if (code < 0)
-		fx_error_real(code, context, file, line);
+		fx_error_real(code, context, ctx);
 }
