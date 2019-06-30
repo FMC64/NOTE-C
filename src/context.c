@@ -12,4 +12,5 @@ void Context_print_term(Context ctx)
 {
 	printf_term("File: %s\n", file_shortpath(ctx.file));
 	printf_term("Line: %d\n", ctx.line);
+
 }

@@ -71,13 +71,13 @@ void terminal_show(void)
 		if (IsKeyDown(KEY_CTRL_RIGHT))
 			x++;
 
-		y = CLAMP(y, 0, lines.count - 1);
+		y = CLAMP(y, 0, (ssize_t)(lines.count - 1 - 7));
 		if (x < 0)
 			x = 0;
 
 		ML_clear_vram();
 
-		for (i = 0; i < 7; i++) {
+		for (i = 0; i < 8; i++) {
 			if (y + i >= lines.count)
 				continue;
 			if (x >= strlen(lines.str[y + i]))
