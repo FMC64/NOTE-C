@@ -26,3 +26,4 @@
 #include "string.h"
 #include "io.h"
 #include "compiler.h"
+#include "terminal.h"

@@ -19,3 +19,4 @@ SourceFile=:src\io.c
 SourceFile=:src\string.c
 SourceFile=:src\memcheck.c
 SourceFile=:src\context.c
+SourceFile=:src\terminal.c
