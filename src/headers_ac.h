@@ -1,6 +1,10 @@
 
 #pragma once
 
+
+#define SH4
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -18,6 +22,9 @@ typedef signed long ssize_t;
 #endif
 
 #include <fxlib.h>
+#ifdef SH4
+#include "sh4.h"
+#endif
 
 #include "MonochromeLib.h"
 

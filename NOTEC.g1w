@@ -20,3 +20,4 @@ SourceFile=:src\string.c
 SourceFile=:src\memcheck.c
 SourceFile=:src\context.c
 SourceFile=:src\terminal.c
+SourceFile=:src\sh4.c
