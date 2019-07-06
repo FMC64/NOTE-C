@@ -14,3 +14,5 @@ static Context Context_init(const char *file, int line)
 
 void Context_print(Context ctx, int *y);
 void Context_print_term(Context ctx);
+CContext CContext_init(const char *file, int line, int colon);
+void CContext_print_term(CContext ctx);

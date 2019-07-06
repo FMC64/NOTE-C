@@ -29,7 +29,8 @@ static jmp_buf main_end;
 int AddIn_main(int isAppli, unsigned short OptionNum)
 {
 	if (setjmp(main_end) == 0) {
-		CCompiler("\\\\crd0\\TEST.c");
+		//CCompiler("\\\\crd0\\TEST.c");
+		CCompiler("\\\\fls0\\TEST.c");
 
 		#ifdef MEMCHECK
 		memcheck_recap();

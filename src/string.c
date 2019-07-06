@@ -95,6 +95,89 @@ void Str_remove(Str *str, size_t start, size_t size)
 	str->size -= size;
 }
 
+Str Str_dup(Str str)
+{
+	char *data = (char*)malloc((str.size + 1) * sizeof(char));
+
+	memcpy(data, str.data, str.size * sizeof(char));
+	return Str_init(str.size, data);
+}
+
+int Str_char_escape(Str str, size_t *i, char *pres, CContext ctx)
+{
+	if (str.data[*i] == '\\') {
+		(*i)++;
+		if ((*i) >= str.size) {
+			terminal_flush();
+			CContext_print_term(ctx);
+			printf_term("Escaping sequence with no control character.\n");
+			terminal_show();
+			return 0;
+		}
+		switch (str.data[(*i)++]) {
+		case 'a':
+			*pres = 0x07;
+		case 'b':
+			*pres = 0x08;
+			break;
+		case 'e':
+			*pres = 0x1B;
+			break;
+		case 'f':
+			*pres = 0x0C;
+			break;
+		case 'n':
+			*pres = 0x0A;
+			break;
+		case 'r':
+			*pres = 0x0D;
+			break;
+		case 't':
+			*pres = 0x09;
+			break;
+		case 'v':
+			*pres = 0x0B;
+			break;
+		case '\\':
+			*pres = 0x5C;
+			break;
+		case '\'':
+			*pres = 0x27;
+			break;
+		case '\"':
+			*pres = 0x22;
+			break;
+		case '\?':
+			*pres = 0x3F;
+			break;
+		default:
+			terminal_flush();
+			CContext_print_term(ctx);
+			printf_term("Unrecognized escaping character: '%c'.\n", str.data[(*i) - 1]);
+			terminal_show();
+			break;
+		}
+	} else
+		*pres = str.data[(*i)++];
+	return 1;
+}
+
+int Str_escape(Str str, Str *pres, CContext ctx)
+{
+	Str res = Str_dup(str);
+	size_t i;
+	size_t pos = 0;
+
+	for (i = 0; i < str.size;)
+		if (!Str_char_escape(str, &i, &res.data[pos++], ctx)) {
+			Str_destroy(res);
+			return 0;
+		}
+	res.size = pos;
+	*pres = res;
+	return 1;
+}
+
 void Str_destroy(Str str)
 {
 	free(str.data);
@@ -107,6 +190,14 @@ char* string_create_from_Str(Str str)
 
 	memcpy(res, str.data, str.size * sizeof(char));
 	res[str.size] = 0;
+	return res;
+}
+
+char* Str_to_string(Str str)
+{
+	char *res = string_create_from_Str(str);
+
+	Str_destroy(str);
 	return res;
 }
 
@@ -139,7 +230,7 @@ void VecStr_print(VecStr vec)
 
 	terminal_flush();
 
-	printf_term("Tokens: (%u)\n", vec.count);
+	printf_term("VecStr: %u entries\n", vec.count);
 	for (i = 0; i < vec.count; i++)
 		printf_term("'%s' ", vec.str[i]);
 
@@ -155,3 +246,5 @@ void VecStr_destroy(VecStr vec)
 	free(vec.str);
 	return;
 }
+
+

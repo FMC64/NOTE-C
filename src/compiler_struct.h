@@ -1,16 +1,27 @@
 
 #pragma once
 
+typedef enum {
+	CTOKEN_OPERATOR,
+	CTOKEN_IDENTIFIER
+} CTokenType;
+
+typedef struct {
+	CTokenType type;
+	const char *str;
+	CContext ctx;
+} CToken;
+
 typedef struct {
 	size_t count;
 	size_t allocated;
-	char **str;
-} VecStr;
+	CToken *token;
+} VecCToken;
 
 typedef struct {
 	char *input_file_path;
 	int input_file;
-	VecStr tokens;
+	VecCToken tokens;
 } CBuf;
 
 typedef struct {
