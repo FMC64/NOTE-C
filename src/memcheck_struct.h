@@ -3,6 +3,7 @@
 
 typedef struct {
 	void *ptr;
+	size_t size;
 	Context ctx;
 } MemcheckBlock;
 

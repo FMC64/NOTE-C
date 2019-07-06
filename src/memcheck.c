@@ -1,11 +1,12 @@
 
 #include "headers_ac.h"
 
-static MemcheckBlock MemcheckBlock_init(void *ptr, Context ctx)
+static MemcheckBlock MemcheckBlock_init(void *ptr, size_t size, Context ctx)
 {
 	MemcheckBlock res;
 
 	res.ptr = ptr;
+	res.size = size;
 	res.ctx = ctx;
 	return res;
 }
@@ -63,7 +64,7 @@ static void VecMemcheckBlock_free(VecMemcheckBlock *vec, void *ptr, Context ctx)
 	printf_term("Press EXIT to continue");
 
 	terminal_show();
-	exit(1);
+	exit(0);
 }
 
 static void VecMemcheckBlock_destroy(VecMemcheckBlock blocks)
@@ -73,20 +74,43 @@ static void VecMemcheckBlock_destroy(VecMemcheckBlock blocks)
 }
 
 static VecMemcheckBlock blocks = {0, 0, NULL};
+static is_disabled = 0;
+
+static void alloc_check(size_t size, void *ptr, Context ctx)
+{
+	if (!((ptr == NULL) && (size > 0)))
+		return;
+
+	terminal_flush();
+
+	printf_term("malloc error: block can't be allocated\n");
+	printf_term("Returned null for %u bytes\n", size);
+	Context_print_term(ctx);
+	printf_term("%d blocks allocated\n\n", blocks.count);
+	printf_term("Press EXIT to continue");
+
+	terminal_show();
+	exit(0);
+}
 
 void* memcheck_malloc(size_t size, Context ctx)
 {
 	void *res = malloc(size);
 
-	VecMemcheckBlock_add(&blocks, MemcheckBlock_init(res, ctx));
+	alloc_check(size, res, ctx);
+	if (!is_disabled)
+		VecMemcheckBlock_add(&blocks, MemcheckBlock_init(res, size, ctx));
 	return res;
 }
 
 void* memcheck_calloc(size_t member_count, size_t size, Context ctx)
 {
 	void *res = calloc(member_count, size);
+	size_t size_ac = member_count * size;
 
-	VecMemcheckBlock_add(&blocks, MemcheckBlock_init(res, ctx));
+	alloc_check(size_ac, res, ctx);
+	if (!is_disabled)
+		VecMemcheckBlock_add(&blocks, MemcheckBlock_init(res, size_ac, ctx));
 	return res;
 }
 
@@ -94,26 +118,48 @@ void* memcheck_realloc(void *ptr, size_t new_size, Context ctx)
 {
 	void *res = realloc(ptr, new_size);
 
-	VecMemcheckBlock_free(&blocks, ptr, ctx);
-	VecMemcheckBlock_add(&blocks, MemcheckBlock_init(res, ctx));
+	alloc_check(new_size, res, ctx);
+	if (!is_disabled) {
+		VecMemcheckBlock_free(&blocks, ptr, ctx);
+		VecMemcheckBlock_add(&blocks, MemcheckBlock_init(res, new_size, ctx));
+	}
 	return res;
 }
 
 void memcheck_free(void *ptr, Context ctx)
 {
-	VecMemcheckBlock_free(&blocks, ptr, ctx);
+	if (!is_disabled)
+		VecMemcheckBlock_free(&blocks, ptr, ctx);
 	free(ptr);
 	return;
+}
+
+static void MemcheckBlock_print(MemcheckBlock block)
+{
+	printf_term("%p: %u bytes\n", block.ptr, block.size);
+	Context_print_term(block.ctx);
+}
+
+static void VecMemcheckBlock_print(VecMemcheckBlock vec)
+{
+	size_t i;
+
+	for (i = 0; i < vec.count; i++) {
+		MemcheckBlock_print(vec.block[i]);
+		printf_term("\n");
+	}
 }
 
 void memcheck_recap(void)
 {
 	terminal_flush();
+	is_disabled = 1;
 	if (blocks.count == 0)
 		printf_term("malloc OK\n\n");
 	else {
 		printf_term("malloc error:\n");
 		printf_term("net %d blocks allocated\n\n", blocks.count);
+		VecMemcheckBlock_print(blocks);
 	}
 	printf_term("Press EXIT to continue");
 	terminal_show();

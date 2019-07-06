@@ -2,6 +2,8 @@
 #pragma once
 
 char* strdup(const char *src);
+int streq(const char *a, const char *b);
+int streq_part(const char *str, const char *part);
 
 Str Str_empty(void);
 Str Str_init(size_t size, char *data);
@@ -16,4 +18,5 @@ char* string_create_from_Str(Str str);
 
 VecStr VecStr_init(void);
 void VecStr_add(VecStr *vec, const char *to_add);
+void VecStr_print(VecStr vec);
 void VecStr_destroy(VecStr vec);

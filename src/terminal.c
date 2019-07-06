@@ -6,9 +6,8 @@ static Str buf = {0, NULL};
 
 static void flush_buf(void)
 {
-	if (buf.size == 0)
-		return;
-	VecStr_add(&lines, string_create_from_Str(buf));
+	if (buf.size > 0)
+		VecStr_add(&lines, string_create_from_Str(buf));
 	Str_destroy(buf);
 	buf = Str_empty();
 }

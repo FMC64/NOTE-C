@@ -10,6 +10,32 @@ char* strdup(const char *src)
 	return res;
 }
 
+int streq(const char *a, const char *b)
+{
+	size_t i;
+
+	for (i = 0; 1; i++) {
+		if (a[i] != b[i])
+			return 0;
+		if (a[i] == 0)
+			return 1;
+	}
+}
+
+int streq_part(const char *str, const char *part)
+{
+	size_t i;
+
+	for (i = 0; 1; i++) {
+		if (part[i] == 0)
+			return 1;
+		if (str[i] != part[i])
+			return 0;
+		if (str[i] == 0)
+			return 1;
+	}
+}
+
 Str Str_empty(void)
 {
 	Str res;
@@ -94,7 +120,7 @@ VecStr VecStr_init(void)
 	return res;
 }
 
-// Append by copy
+// Append by reference
 void VecStr_add(VecStr *vec, const char *to_add)
 {
 	size_t cur = vec->count++;
@@ -103,8 +129,21 @@ void VecStr_add(VecStr *vec, const char *to_add)
 		vec->allocated += 16;
 		vec->str = (char**)realloc(vec->str, vec->allocated * sizeof(char*));
 	}
-	vec->str[cur] = strdup(to_add);
+	vec->str[cur] = to_add;
 	return;
+}
+
+void VecStr_print(VecStr vec)
+{
+	size_t i;
+
+	terminal_flush();
+
+	printf_term("Tokens: (%u)\n", vec.count);
+	for (i = 0; i < vec.count; i++)
+		printf_term("'%s' ", vec.str[i]);
+
+	terminal_show();
 }
 
 void VecStr_destroy(VecStr vec)
