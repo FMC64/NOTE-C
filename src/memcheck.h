@@ -6,6 +6,7 @@ void* memcheck_calloc(size_t member_count, size_t size, Context ctx);
 void* memcheck_realloc(void *ptr, size_t new_size, Context ctx);
 void memcheck_free(void *ptr, Context ctx);
 void memcheck_recap(void);
+void memcheck_stats(void);
 
 #ifdef MEMCHECK
 

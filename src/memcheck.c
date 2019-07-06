@@ -166,3 +166,21 @@ void memcheck_recap(void)
 	VecMemcheckBlock_destroy(blocks);
 	return;
 }
+
+void memcheck_stats(void)
+{
+	size_t i;
+	size_t total = 0;
+	size_t overhead = blocks.count * 4;
+	size_t memcheck_overhead = blocks.count * sizeof(MemcheckBlock);
+
+	for (i = 0; i < blocks.count; i++)
+		total += blocks.block[i].size;
+
+	terminal_flush();
+
+	printf_term("%u blocks\n%u bytes allocated\noverhead: %u bytes\nmemcheck overhead: %u bytes\n\nTOTAL: %u bytes\n",
+	blocks.count, total, overhead, memcheck_overhead, total + overhead + memcheck_overhead);
+
+	terminal_show();
+}
