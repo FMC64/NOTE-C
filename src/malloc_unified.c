@@ -3,6 +3,8 @@
 
 #include "macro.h"
 
+void __malloc_ext_init(void *heap, unsigned int len);
+
 void *malloc_ext(unsigned int size);
 void *realloc_ext(void *ptr, size_t size);
 void free_ext(void *ptr);

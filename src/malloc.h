@@ -2,6 +2,7 @@
 #pragma once
 
 void malloc_unified_init(void);
+
 void* malloc_unified(size_t size);
 void* calloc_unified(size_t member_count, size_t size);
 void* realloc_unified(void *ptr, size_t size);
