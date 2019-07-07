@@ -10,6 +10,7 @@ void memcheck_recap(void);
 void memcheck_stats(void);
 
 void memcheck_rnd_alloc(void);
+void memcheck_test_limit(void);
 
 #ifdef MEMCHECK
 

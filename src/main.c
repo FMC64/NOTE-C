@@ -30,6 +30,7 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 {
 	if (setjmp(main_end) == 0) {
 		malloc_unified_init();
+		//memcheck_test_limit();
 		//CCompiler("\\\\crd0\\TEST.c");
 		CCompiler("\\\\fls0\\TEST.c");
 

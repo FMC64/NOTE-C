@@ -95,7 +95,7 @@ static void VecMemcheckBlock_add(VecMemcheckBlock *vec, MemcheckBlock to_add)
 		*cur = MemcheckBlockNode_alloc(root);
 	for (i = 0; i < key_bits; i++) {
 		root = *cur;
-		cur = &(*cur)->sub[(key >> i) & 1];
+		cur = &(*cur)->sub[(key >> (key_bits - 1 - i)) & 1];
 		if ((*cur) == NULL)
 			*cur = MemcheckBlockNode_alloc(root);
 	}
@@ -232,7 +232,7 @@ static int VecMemcheckBlock_search_delete(VecMemcheckBlock *vec, void *ptr)
 	if ((*cur) == NULL)
 		return 0;
 	for (i = 0; i < key_bits; i++) {
-		cur = &(*cur)->sub[(key >> i) & 1];
+		cur = &(*cur)->sub[(key >> (key_bits - 1 - i)) & 1];
 		if ((*cur) == NULL)
 			return 0;
 	}
@@ -283,7 +283,7 @@ static void alloc_check(size_t size, void *ptr, Context ctx)
 	printf_term("malloc error: block can't be allocated\n");
 	printf_term("Returned null for %u bytes\n", size);
 	Context_print_term(ctx);
-	printf_term("%u blocks allocated\n\n", VecMemcheckBlock_block_count(blocks));
+	printf_term("net %u blocks allocated\ntotal %u bytes\n\n", VecMemcheckBlock_block_count(blocks), VecMemcheckBlock_blocks_size(blocks));
 	printf_term("Press EXIT to continue");
 
 	terminal_show();
