@@ -11,6 +11,7 @@ void memcheck_stats(void);
 
 void memcheck_rnd_alloc(void);
 void memcheck_test_limit(void);
+void memcheck_test_fragmenting(void);
 
 #ifdef MEMCHECK
 
