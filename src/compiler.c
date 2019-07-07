@@ -211,6 +211,8 @@ static int read_tokens(CBuf *buf, char *str)
 		terminal_show();
 		return 0;
 	}
+	memcheck_test_rnd_alloc();
+	memcheck_stats();
 	VecCToken_print(buf->tokens);
 	return 1;
 }
