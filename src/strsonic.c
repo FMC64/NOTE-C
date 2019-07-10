@@ -143,27 +143,8 @@ void* StrSonic_resolve(StrSonic sonic, const char *key)
 
 void StrSonic_destroy_elem(StrSonic sonic, const char *key)
 {
-	StrSonicNode *node = &sonic.node;
-	size_t i;
-	char *key_ac = key;
-
-	while (1) {
-		loop_start:
-
-		if (key_ac[0] == 0) {
-			if (sonic.elem_destroy_cb != NULL)
-				sonic.elem_destroy_cb(node->value);
-			return;
-		}
-		for (i = 0; i < node->sub.count; i++) {
-			if (streq_part(key_ac, node->sub.node[i].key)) {
-				node = &node->sub.node[i];
-				key_ac = &key_ac[strlen(node->key)];
-				goto loop_start;
-			}
-		}
-		return;
-	}
+	if (sonic.elem_destroy_cb != NULL)
+		sonic.elem_destroy_cb(StrSonic_resolve(sonic, key));
 }
 
 static void StrSonicNode_destroy_iter(StrSonicNode node, void (*elem_destroy_cb)(void*))
