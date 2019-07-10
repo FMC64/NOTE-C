@@ -4,6 +4,7 @@
 char* strdup(const char *src);
 int streq(const char *a, const char *b);
 int streq_part(const char *str, const char *part);
+int streq_part_max(const char *str, const char *part, size_t *pmax);
 
 Str Str_empty(void);
 Str Str_init(size_t size, char *data);
@@ -23,3 +24,10 @@ VecStr VecStr_init(void);
 void VecStr_add(VecStr *vec, const char *to_add);
 void VecStr_print(VecStr vec);
 void VecStr_destroy(VecStr vec);
+
+StrSonic StrSonic_init(void (*elem_destroy_cb)(void*));
+void StrSonic_add(StrSonic *sonic, const char *key, void *value);
+void StrSonic_print(StrSonic sonic);
+void* StrSonic_resolve(StrSonic sonic, const char *key);
+void StrSonic_destroy_elem(StrSonic sonic, const char *key);
+void StrSonic_destroy(StrSonic sonic);

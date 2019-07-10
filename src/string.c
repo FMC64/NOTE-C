@@ -36,6 +36,22 @@ int streq_part(const char *str, const char *part)
 	}
 }
 
+int streq_part_max(const char *str, const char *part, size_t *pmax)
+{
+	size_t i;
+
+	for (i = 0; 1; i++) {
+		if (part[i] == 0)
+			return 1;
+		if (str[i] != part[i]) {
+			*pmax = i;
+			return 0;
+		}
+		if (str[i] == 0)
+			return 1;
+	}
+}
+
 Str Str_empty(void)
 {
 	Str res;

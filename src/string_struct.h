@@ -11,3 +11,21 @@ typedef struct {
 	size_t allocated;
 	char **str;
 } VecStr;
+
+typedef struct StrSonicNode StrSonicNode;
+
+typedef struct {
+	size_t count;
+	StrSonicNode *node;
+} VecStrSonicNode;
+
+struct StrSonicNode {
+	VecStrSonicNode sub;
+	char *key;
+	void *value;
+};
+
+typedef struct {
+	StrSonicNode node;
+	void (*elem_destroy_cb)(void*);
+} StrSonic;

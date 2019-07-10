@@ -24,3 +24,4 @@ SourceFile=:src\sh4.c
 SourceFile=:src\memcheck_test.c
 SourceFile=:src\malloc.c
 SourceFile=:src\malloc_unified.c
+SourceFile=:src\strsonic.c
