@@ -51,11 +51,16 @@ StrSonic StrSonic_init(void (*elem_destroy_cb)(void*))
 static void StrSonicNode_split(StrSonicNode *node, size_t len, StrSonicNode to_share)
 {
 	StrSonicNode new_node = StrSonicNode_null();
-	char *new_key = strdup(&node->key[len]);
+	char *sub_key = strdup(&node->key[len]);
+	char *new_key;
 
 	new_node.key = node->key;
 	new_node.key[len] = 0;
-	node->key = new_key;
+	new_key = strdup(new_node.key);
+	free(new_node.key);
+	new_node.key = new_key;
+
+	node->key = sub_key;
 	VecStrSonicNode_add(&new_node.sub, *node);
 	VecStrSonicNode_add(&new_node.sub, to_share);
 	*node = new_node;
