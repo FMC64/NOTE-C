@@ -211,8 +211,6 @@ static int read_tokens(CBuf *buf, char *str)
 		terminal_show();
 		return 0;
 	}
-	memcheck_test_rnd_alloc();
-	memcheck_stats();
 	VecCToken_print(buf->tokens);
 	return 1;
 }
@@ -239,25 +237,6 @@ void CBuf_destroy(CBuf buf)
 	fx_assert(Bfile_CloseFile(buf.input_file), buf.input_file_path);
 	free(buf.input_file_path);
 	VecCToken_destroy(buf.tokens);
-	return;
-}
-
-CParser CParser_init(char *source_path)
-{
-	CParser res;
-
-	res.buf = CBuf_init(source_path);
-	return res;
-}
-
-int CParser_exec(CParser *parser)
-{
-	return CBuf_readTokens(&parser->buf);
-}
-
-void CParser_destroy(CParser parser)
-{
-	CBuf_destroy(parser.buf);
 	return;
 }
 

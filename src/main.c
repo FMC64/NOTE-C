@@ -26,10 +26,27 @@
 static status = 1;
 static jmp_buf main_end;
 
+static void strsonic_test(void)
+{
+	StrSonic sonic = StrSonic_init(NULL);
+
+	StrSonic_add(&sonic, "ab", NULL);
+	StrSonic_add(&sonic, "cd", NULL);
+	StrSonic_add(&sonic, "ae", NULL);
+	StrSonic_add(&sonic, "str", NULL);
+	StrSonic_add(&sonic, "string", NULL);
+	StrSonic_add(&sonic, "string_test", (void*)6);
+	StrSonic_add(&sonic, "string_lol", NULL);
+	StrSonic_print(sonic);
+	memcheck_stats();
+	StrSonic_destroy(&sonic);
+}
+
 int AddIn_main(int isAppli, unsigned short OptionNum)
 {
 	if (setjmp(main_end) == 0) {
 		malloc_unified_init();
+
 		//memcheck_test_fragmenting();
 		//CCompiler("\\\\crd0\\TEST.c");
 		CCompiler("\\\\fls0\\TEST.c");

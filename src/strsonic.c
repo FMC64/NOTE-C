@@ -66,7 +66,7 @@ static void StrSonicNode_split(StrSonicNode *node, size_t len, StrSonicNode to_s
 	*node = new_node;
 }
 
-void StrSonic_add(StrSonic *sonic, const char *key, void *value)
+int StrSonic_add(StrSonic *sonic, const char *key, void *value)
 {
 	StrSonicNode *node = &sonic->node;
 	StrSonicNode *max;
@@ -79,9 +79,11 @@ void StrSonic_add(StrSonic *sonic, const char *key, void *value)
 		loop_start:
 
 		if (key_ac[0] == 0) {
-			node->key = strdup(key_ac);
-			node->value = value;
-			return;
+			if (node->value != NULL)
+				return 0;
+			if (node->key == NULL)
+				node->key = strdup(key_ac);
+			return 1;
 		}
 		max = NULL;
 		max_value = 0;
@@ -98,10 +100,10 @@ void StrSonic_add(StrSonic *sonic, const char *key, void *value)
 		}
 		if (max != NULL) {
 			StrSonicNode_split(max, max_value, StrSonicNode_init(strdup(&key_ac[max_value]), value));
-			return;
+			return 1;
 		} else {
 			VecStrSonicNode_add(&node->sub, StrSonicNode_init(strdup(key_ac), value));
-			return;
+			return 1;
 		}
 	}
 }
@@ -124,9 +126,9 @@ void StrSonic_print(StrSonic sonic)
 	terminal_show();
 }
 
-void* StrSonic_resolve(StrSonic sonic, const char *key)
+void** StrSonic_resolve_ref(StrSonic *sonic, const char *key)
 {
-	StrSonicNode *node = &sonic.node;
+	StrSonicNode *node = &sonic->node;
 	size_t i;
 	char *key_ac = key;
 
@@ -134,7 +136,7 @@ void* StrSonic_resolve(StrSonic sonic, const char *key)
 		loop_start:
 
 		if (key_ac[0] == 0)
-			return node->value;
+			return &node->value;
 		for (i = 0; i < node->sub.count; i++) {
 			if (streq_part(key_ac, node->sub.node[i].key)) {
 				node = &node->sub.node[i];
@@ -146,25 +148,38 @@ void* StrSonic_resolve(StrSonic sonic, const char *key)
 	}
 }
 
-void StrSonic_destroy_elem(StrSonic sonic, const char *key)
+
+void* StrSonic_resolve(StrSonic *sonic, const char *key)
 {
-	if (sonic.elem_destroy_cb != NULL)
-		sonic.elem_destroy_cb(StrSonic_resolve(sonic, key));
+	return *StrSonic_resolve_ref(sonic, key);
 }
 
-static void StrSonicNode_destroy_iter(StrSonicNode node, void (*elem_destroy_cb)(void*))
+static void destroy_elem(StrSonic *sonic, void **data)
+{
+	if (sonic->elem_destroy_cb != NULL)
+		if (*data != NULL) {
+			sonic->elem_destroy_cb(*data);
+			*data = NULL;
+		}
+}
+
+void StrSonic_destroy_elem(StrSonic *sonic, const char *key)
+{
+	destroy_elem(sonic, StrSonic_resolve_ref(sonic, key));
+}
+
+static void StrSonicNode_destroy_iter(StrSonic *sonic, StrSonicNode *node, void (*elem_destroy_cb)(void*))
 {
 	size_t i;
 
-	for (i = 0; i < node.sub.count; i++)
-		StrSonicNode_destroy_iter(node.sub.node[i], elem_destroy_cb);
-	VecStrSonicNode_destroy(node.sub);
-	free(node.key);
-	if (elem_destroy_cb != NULL)
-		elem_destroy_cb(node.value);
+	for (i = 0; i < node->sub.count; i++)
+		StrSonicNode_destroy_iter(sonic, &node->sub.node[i], elem_destroy_cb);
+	VecStrSonicNode_destroy(node->sub);
+	free(node->key);
+	destroy_elem(sonic, &node->value);
 }
 
-void StrSonic_destroy(StrSonic sonic)
+void StrSonic_destroy(StrSonic *sonic)
 {
-	StrSonicNode_destroy_iter(sonic.node, sonic.elem_destroy_cb);
+	StrSonicNode_destroy_iter(sonic, &sonic->node, sonic->elem_destroy_cb);
 }

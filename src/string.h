@@ -26,8 +26,9 @@ void VecStr_print(VecStr vec);
 void VecStr_destroy(VecStr vec);
 
 StrSonic StrSonic_init(void (*elem_destroy_cb)(void*));
-void StrSonic_add(StrSonic *sonic, const char *key, void *value);
+int StrSonic_add(StrSonic *sonic, const char *key, void *value);
 void StrSonic_print(StrSonic sonic);
-void* StrSonic_resolve(StrSonic sonic, const char *key);
-void StrSonic_destroy_elem(StrSonic sonic, const char *key);
-void StrSonic_destroy(StrSonic sonic);
+void** StrSonic_resolve_ref(StrSonic *sonic, const char *key);
+void* StrSonic_resolve(StrSonic *sonic, const char *key);
+void StrSonic_destroy_elem(StrSonic *sonic, const char *key);
+void StrSonic_destroy(StrSonic *sonic);
