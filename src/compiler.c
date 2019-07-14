@@ -141,6 +141,8 @@ static int read_tokens(CBuf *buf, char *str)
 	"+", "-", "*", "/", "%" ,
 	"(", ")", "[", "]", "{", "}", "?", ":", ";", ",", "#", NULL};
 	size_t i = 0;
+	int is_comment = 0;
+	int is_comment_single_line = 0;
 	int is_quote = 0;
 	char quote_char;
 	size_t quote_start;
@@ -152,6 +154,24 @@ static int read_tokens(CBuf *buf, char *str)
 
 	while (str[i] != 0) {
 		ctx = CContext_init(buf->input_file_path, line + 1, i - line_start + 1);
+		if (str[i] == '\n') {
+			line++;
+			line_start = i + 1;
+			is_comment_single_line = 0;
+		}
+		if (is_comment_single_line) {
+			i++;
+			continue;
+		}
+		if (is_comment) {
+			if (streq_part(&str[i], "*/")) {
+				is_comment = 0;
+				i += 2;
+				continue;
+			}
+			i++;
+			continue;
+		}
 		if ((str[i] == '"') || (str[i] == '\'')) {
 			if (!is_quote)
 				quote_char = str[i];
@@ -174,9 +194,15 @@ static int read_tokens(CBuf *buf, char *str)
 			i++;
 			continue;
 		}
-		if (str[i] == '\n') {
-			line++;
-			line_start = i + 1;
+		if (streq_part(&str[i], "//")) {
+			is_comment_single_line = 1;
+			i += 2;
+			continue;
+		}
+		if (streq_part(&str[i], "/*")) {
+			is_comment = 1;
+			i += 2;
+			continue;
 		}
 		if (streq_part_in_arr(&str[i], sep, &found)) {
 			i += strlen(found);
