@@ -15,4 +15,6 @@ static Context Context_init(const char *file, int line)
 void Context_print(Context ctx, int *y);
 void Context_print_term(Context ctx);
 CContext CContext_init(const char *file, int line, int colon);
-void CContext_print_term(CContext ctx);
+CContext CContext_null(void);
+void CContext_print(CContext ctx);
+CContext CContext_polled(VecCToken vec, size_t i);

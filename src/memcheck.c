@@ -103,7 +103,7 @@ static void VecMemcheckBlock_add(VecMemcheckBlock *vec, MemcheckBlock to_add)
 	if ((*cur)->block != NULL) {
 		terminal_flush();
 
-		printf_term("malloc error:\nduplicated block %p\n", to_add.ptr);
+		printf("malloc error:\nduplicated block %p\n", to_add.ptr);
 
 		terminal_show();
 		exit(0);
@@ -248,11 +248,11 @@ static void VecMemcheckBlock_free(VecMemcheckBlock *vec, void *ptr, Context ctx)
 
 	terminal_flush();
 
-	printf_term("malloc error: block not found\n");
-	printf_term("Can't free %p\n", ptr);
+	printf("malloc error: block not found\n");
+	printf("Can't free %p\n", ptr);
 	Context_print_term(ctx);
-	printf_term("%u blocks allocated\n\n", VecMemcheckBlock_block_count(*vec));
-	printf_term("Press EXIT to continue");
+	printf("%u blocks allocated\n\n", VecMemcheckBlock_block_count(*vec));
+	printf("Press EXIT to continue");
 
 	terminal_show();
 	exit(0);
@@ -280,11 +280,11 @@ static void alloc_check(size_t size, void *ptr, Context ctx)
 
 	terminal_flush();
 
-	printf_term("malloc error: block can't be allocated\n");
-	printf_term("Returned null for %u bytes\n", size);
+	printf("malloc error: block can't be allocated\n");
+	printf("Returned null for %u bytes\n", size);
 	Context_print_term(ctx);
-	printf_term("net %u blocks allocated\ntotal %u bytes\n\n", VecMemcheckBlock_block_count(blocks), VecMemcheckBlock_blocks_size(blocks));
-	printf_term("Press EXIT to continue");
+	printf("net %u blocks allocated\ntotal %u bytes\n\n", VecMemcheckBlock_block_count(blocks), VecMemcheckBlock_blocks_size(blocks));
+	printf("Press EXIT to continue");
 
 	terminal_show();
 	exit(0);
@@ -333,7 +333,7 @@ void memcheck_free(void *ptr, Context ctx)
 
 static void MemcheckBlock_print(MemcheckBlock block)
 {
-	printf_term("%p: %u bytes\n", block.ptr, block.size);
+	printf("%p: %u bytes\n", block.ptr, block.size);
 	Context_print_term(block.ctx);
 }
 
@@ -345,7 +345,7 @@ static void MemcheckBlock_print_iter(MemcheckBlockNode *node)
 		return;
 	if (node->block != NULL) {
 		MemcheckBlock_print(*node->block);
-		printf_term("\n");
+		printf("\n");
 	}
 	for (i = 0; i < 2; i++)
 		MemcheckBlock_print_iter(node->sub[i]);
@@ -358,7 +358,7 @@ static void VecMemcheckBlock_print(VecMemcheckBlock vec)
 
 	for (i = 0; i < vec.count; i++) {
 		MemcheckBlock_print(vec.block[i]);
-		printf_term("\n");
+		printf("\n");
 	}
 
 	#else
@@ -377,13 +377,13 @@ void memcheck_recap(void)
 	block_count = VecMemcheckBlock_block_count(blocks);
 	blocks_size = VecMemcheckBlock_blocks_size(blocks);
 	if (block_count == 0)
-		printf_term("malloc OK\n\n");
+		printf("malloc OK\n\n");
 	else {
-		printf_term("malloc error:\n");
-		printf_term("net %u blocks allocated\ntotal %u bytes\n\n", block_count, blocks_size);
+		printf("malloc error:\n");
+		printf("net %u blocks allocated\ntotal %u bytes\n\n", block_count, blocks_size);
 		VecMemcheckBlock_print(blocks);
 	}
-	printf_term("Press EXIT to continue");
+	printf("Press EXIT to continue");
 	terminal_show();
 	VecMemcheckBlock_destroy(blocks);
 	return;
@@ -402,7 +402,7 @@ void memcheck_stats(void)
 	#endif // MEMCHECK_LIGHT
 	terminal_flush();
 
-	printf_term("%u blocks\n%u bytes allocated\noverhead: %u bytes\nmemcheck overhead: %u bytes\n\nTOTAL: %u bytes\n",
+	printf("%u blocks\n%u bytes allocated\noverhead: %u bytes\nmemcheck overhead: %u bytes\n\nTOTAL: %u bytes\n",
 	block_count, total, overhead, memcheck_overhead, total + overhead + memcheck_overhead);
 
 	terminal_show();

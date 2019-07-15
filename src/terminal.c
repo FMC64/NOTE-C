@@ -38,7 +38,7 @@ static buf_append(const char *to_add)
 	while (try_cut_buf());
 }
 
-int printf_term(const char *fmt, ...)
+int printf(const char *fmt, ...)
 {
 	char buf[1024];
 	va_list args;
@@ -48,6 +48,22 @@ int printf_term(const char *fmt, ...)
 	res = vsprintf(buf, fmt, args);
 	va_end(args);
 	buf_append(buf);
+	return res;
+}
+
+int printf_error(CContext ctx, const char *fmt, ...)
+{
+	char buf[1024];
+	va_list args;
+	int res;
+
+	printf("error: ");
+	CContext_print(ctx);
+	va_start(args, fmt);
+	res = vsprintf(buf, fmt, args);
+	va_end(args);
+	buf_append(buf);
+	printf("\n\n");
 	return res;
 }
 

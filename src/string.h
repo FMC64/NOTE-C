@@ -23,6 +23,8 @@ char* Str_to_string(Str str);
 VecStr VecStr_init(void);
 void VecStr_add(VecStr *vec, const char *to_add);
 void VecStr_print(VecStr vec);
+int VecStr_at(VecStr vec, size_t i, char **pres);
+int VecStr_poll(VecStr vec, size_t *i, char **pres);
 void VecStr_destroy(VecStr vec);
 
 StrSonic StrSonic_init(void (*elem_destroy_cb)(void*));

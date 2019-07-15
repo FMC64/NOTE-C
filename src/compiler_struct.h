@@ -39,6 +39,15 @@ typedef struct {
 	void *data;
 } CSymbol;
 
+typedef struct {
+	StrSonic symbols;
+} CBlock;
+
+typedef struct {
+	size_t count;
+	CBlock *block;
+} CScope;
+
 // CPP REFERENCE FTW
 typedef enum {
 	CKEYWORD_NONE,
@@ -78,12 +87,11 @@ typedef enum {
 } CKeyword;
 
 typedef enum {
-	CTYPE_SIGNED,
-	CTYPE_UNSIGNED,
-	CTYPE_CONST,
-	CTYPE_STATIC,
-	CTYPE_VOLATILE,
-	CTYPE_REGISTER
+	CTYPE_NONE = 0,
+	CTYPE_SIGNED = 1,
+	CTYPE_UNSIGNED = 2,
+	CTYPE_CONST = 4,
+	CTYPE_VOLATILE = 8,
 } CTypeFlag;
 
 typedef enum {
@@ -95,11 +103,34 @@ typedef enum {
 
 typedef struct {
 	CTypeFlag flags;
-	CPrimitiveType primitiveType;
 	size_t referenceLevel;
-	void *primitiveData;	// Struct members, function prototype
+	CPrimitiveType primitiveType;
+	void *primitiveData;	// For int / float -> bytes count, struct -> ptr to CStruct, function -> CFunction
 } CType;
 
+typedef enum {
+	CSTORAGE_DEFAULT,
+	CSTORAGE_STATIC,
+	CSTORAGE_EXTERN,
+	CSTORAGE_AUTO,
+	CSTORAGE_REGISTER
+} CStorageType;
+
 typedef struct {
-	size_t lol;
-} CStruct;
+	size_t address;
+	CType type;
+	CStorageType storage;
+} CVariable;
+
+typedef struct {
+	size_t size;
+	size_t variableCount;
+	CVariable *variable;
+	int isUnnamed;
+} CStruct;	// I think this could be used for unions as well
+
+typedef struct {
+	CType returnType;
+	size_t argCount;
+	CType *arg;
+} CFunction;

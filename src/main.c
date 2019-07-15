@@ -48,8 +48,8 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 		malloc_unified_init();
 
 		//memcheck_test_fragmenting();
-		//CCompiler("\\\\crd0\\TEST.c");
-		CCompiler("\\\\fls0\\TEST.c");
+		CCompiler("\\\\crd0\\TEST.c");
+		//CCompiler("\\\\fls0\\TEST.c");
 
 		#ifdef MEMCHECK
 		memcheck_recap();

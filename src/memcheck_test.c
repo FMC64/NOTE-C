@@ -30,7 +30,7 @@ void memcheck_test_limit(void)
 			if (ptr[j] != (char)(i + 0x7F)) {
 				terminal_flush();
 
-				printf_term("Iteration #%u, byte %u:\nIncoherent heap.\n", i, j);
+				printf("Iteration #%u, byte %u:\nIncoherent heap.\n", i, j);
 
 				terminal_show();
 				exit(0);
@@ -56,7 +56,7 @@ void memcheck_test_fragmenting(void)
 				if (ptr[i][j] != (char)(i + 0x7F)) {
 					terminal_flush();
 
-					printf_term("Iteration #%u, byte %u:\nIncoherent heap.\n", i, j);
+					printf("Iteration #%u, byte %u:\nIncoherent heap.\n", i, j);
 
 					terminal_show();
 					exit(0);

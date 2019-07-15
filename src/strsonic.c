@@ -113,8 +113,8 @@ static void StrSonicNode_print_iter(StrSonicNode node, size_t depth)
 	size_t i;
 
 	for (i = 0; i < depth; i++)
-		printf_term("  ");
-	printf_term("'%s': %p\n", node.key != NULL ? node.key : "NULL", node.value);
+		printf("  ");
+	printf("'%s': %p\n", node.key != NULL ? node.key : "NULL", node.value);
 	for (i = 0; i < node.sub.count; i++)
 		StrSonicNode_print_iter(node.sub.node[i], depth + 1);
 }
@@ -151,7 +151,12 @@ void** StrSonic_resolve_ref(StrSonic *sonic, const char *key)
 
 void* StrSonic_resolve(StrSonic *sonic, const char *key)
 {
-	return *StrSonic_resolve_ref(sonic, key);
+	void **pres = StrSonic_resolve_ref(sonic, key);
+
+	if (pres != NULL)
+		return *pres;
+	else
+		return NULL;
 }
 
 static void destroy_elem(StrSonic *sonic, void **data)

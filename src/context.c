@@ -10,7 +10,7 @@ void Context_print(Context ctx, int *y)
 
 void Context_print_term(Context ctx)
 {
-	printf_term("File: %s(%d)\n", file_shortpath(ctx.file), ctx.line);
+	printf("File: %s(%d)\n", file_shortpath(ctx.file), ctx.line);
 }
 
 CContext CContext_init(const char *file, int line, int colon)
@@ -23,7 +23,21 @@ CContext CContext_init(const char *file, int line, int colon)
 	return res;
 }
 
-void CContext_print_term(CContext ctx)
+CContext CContext_null(void)
 {
-	printf_term("File: %s, line %d(%d)\n", ctx.file, ctx.line, ctx.colon);
+	return CContext_init("null", 0, 0);
+}
+
+void CContext_print(CContext ctx)
+{
+	printf("%s line %d(%d)\n", ctx.file, ctx.line, ctx.colon);
+}
+
+CContext CContext_polled(VecCToken vec, size_t i)
+{
+	if (i > 0) {
+		i--;
+		return vec.token[i].ctx;
+	} else
+		return CContext_null();
 }

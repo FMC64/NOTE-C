@@ -2,7 +2,7 @@
 #include "headers.h"
 
 // Unsafe function, to use with care and never let any uncontrolled user input go there
-int printf(const char *fmt, ...)
+int printf_locate(const char *fmt, ...)
 {
 	char buf[1024];
 	va_list args;
@@ -132,13 +132,13 @@ void fx_error_real(int code, const char *context, Context ctx)
 {
 	terminal_flush();
 
-	printf_term("ERROR\n\n");
+	printf("ERROR\n\n");
 	Context_print_term(ctx);
-	printf_term("Code: %s\n", IML_FILLEERR_string(code));
+	printf("Code: %s\n", IML_FILLEERR_string(code));
 	if (context == NULL)
-		printf_term("No further info.");
+		printf("No further info.");
 	else
-		printf_term("%s", context);
+		printf("%s", context);
 
 	terminal_show();
 	exit(0);

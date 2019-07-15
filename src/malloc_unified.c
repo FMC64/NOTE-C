@@ -42,7 +42,7 @@ static void hidden_ram_test(void)
 	if (ptr == NULL) {
 		terminal_flush();
 
-		printf_term("No additional RAM found.\n");
+		printf("No additional RAM found.\n");
 
 		terminal_show();
 		exit(0);
@@ -53,7 +53,7 @@ static void hidden_ram_test(void)
 		if (ptr[i] != 70) {
 			terminal_flush();
 
-			printf_term("Unreliable additional RAM.\n");
+			printf("Unreliable additional RAM.\n");
 
 			terminal_show();
 			exit(0);

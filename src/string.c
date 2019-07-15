@@ -125,8 +125,8 @@ int Str_char_escape(Str str, size_t *i, char *pres, CContext ctx)
 		(*i)++;
 		if ((*i) >= str.size) {
 			terminal_flush();
-			CContext_print_term(ctx);
-			printf_term("Escaping sequence with no control character.\n");
+			CContext_print(ctx);
+			printf("Escaping sequence with no control character.\n");
 			terminal_show();
 			return 0;
 		}
@@ -168,8 +168,8 @@ int Str_char_escape(Str str, size_t *i, char *pres, CContext ctx)
 			break;
 		default:
 			terminal_flush();
-			CContext_print_term(ctx);
-			printf_term("Unrecognized escaping character: '%c'.\n", str.data[(*i) - 1]);
+			CContext_print(ctx);
+			printf("Unrecognized escaping character: '%c'.\n", str.data[(*i) - 1]);
 			terminal_show();
 			break;
 		}
@@ -246,11 +246,31 @@ void VecStr_print(VecStr vec)
 
 	terminal_flush();
 
-	printf_term("VecStr: %u entries\n", vec.count);
+	printf("VecStr: %u entries\n", vec.count);
 	for (i = 0; i < vec.count; i++)
-		printf_term("'%s' ", vec.str[i]);
+		printf("'%s' ", vec.str[i]);
 
 	terminal_show();
+}
+
+int VecStr_at(VecStr vec, size_t i, char **pres)
+{
+	if (i < vec.count) {
+		if (pres != NULL)
+			*pres = vec.str[i];
+		return 1;
+	}
+	return 0;
+}
+
+int VecStr_poll(VecStr vec, size_t *i, char **pres)
+{
+	int res;
+
+	res = VecStr_at(vec, *i, pres);
+	if (res)
+		(*i)++;
+	return res;
 }
 
 void VecStr_destroy(VecStr vec)

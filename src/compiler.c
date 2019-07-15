@@ -43,11 +43,31 @@ void VecCToken_print(VecCToken vec)
 
 	terminal_flush();
 
-	printf_term("Tokens: (%u)\n", vec.count);
+	printf("Tokens: (%u)\n", vec.count);
 	for (i = 0; i < vec.count; i++)
-		printf_term("'%s' ", vec.token[i].str);
+		printf("'%s' ", vec.token[i].str);
 
 	terminal_show();
+}
+
+int VecCToken_at(VecCToken vec, size_t i, CToken *pres)
+{
+	if (i < vec.count) {
+		if (pres != NULL)
+			*pres = vec.token[i];
+		return 1;
+	}
+	return 0;
+}
+
+int VecCToken_poll(VecCToken vec, size_t *i, CToken *pres)
+{
+	int res;
+
+	res = VecCToken_at(vec, *i, pres);
+	if (res)
+		(*i)++;
+	return res;
 }
 
 void VecCToken_destroy(VecCToken vec)
@@ -219,8 +239,8 @@ static int read_tokens(CBuf *buf, char *str)
 			free(found);
 			terminal_flush();
 
-			CContext_print_term(ctx);
-			printf_term("Unknown character: '%c'\n", str[i]);
+			CContext_print(ctx);
+			printf("Unknown character: '%c'\n", str[i]);
 
 			terminal_show();
 			return 0;
@@ -230,14 +250,14 @@ static int read_tokens(CBuf *buf, char *str)
 	if (is_quote) {
 		terminal_flush();
 
-		printf_term("Unfinished string started at:\n");
-		CContext_print_term(quote_start_ctx);
-		printf_term("with character: %c\n", quote_char);
+		printf("Unfinished string started at:\n");
+		CContext_print(quote_start_ctx);
+		printf("with character: %c\n", quote_char);
 
 		terminal_show();
 		return 0;
 	}
-	VecCToken_print(buf->tokens);
+	//VecCToken_print(buf->tokens);
 	return 1;
 }
 
@@ -274,12 +294,11 @@ void CCompiler(char *path)
 
 	res = CParser_exec(&parser);
 
-	terminal_flush();
-
+	printf("\n");
 	if (res)
-		printf_term("File %s compiled.\n", path);
+		printf("%s compiled.\n", path);
 	else
-		printf_term("File %s can't be compiled.\n", path);
+		printf("%s can't be compiled.\n", path);
 	terminal_show();
 
 	CParser_destroy(parser);
