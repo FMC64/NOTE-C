@@ -9,8 +9,16 @@ void VecCToken_add(VecCToken *vec, CToken to_add);
 void VecCToken_print(VecCToken vec);
 void VecCToken_print(VecCToken vec);
 int VecCToken_at(VecCToken vec, size_t i, CToken *pres);
-int VecCToken_poll(VecCToken vec, size_t *i, CToken *pres);
 void VecCToken_destroy(VecCToken vec);
+
+StreamCToken StreamCToken_init(VecCToken vec);
+void StreamCToken_begin(StreamCToken *stream);
+void StreamCToken_end(StreamCToken *stream);
+int StreamCToken_forward(StreamCToken *stream);
+int StreamCToken_back(StreamCToken *stream);
+int StreamCToken_at(StreamCToken *stream, CToken *pres);
+int StreamCToken_poll(StreamCToken *stream, CToken *pres);
+int StreamCToken_pollRev(StreamCToken *stream, CToken *pres);
 
 CBuf CBuf_init(char *input_path);
 int CBuf_readTokens(CBuf *buf);
@@ -38,7 +46,7 @@ CParser CParser_init(char *source_path);
 int CParser_exec(CParser *parser);
 void CParser_destroy(CParser parser);
 
-int CKeyword_poll(CScope *scope, VecCToken tokens, size_t *i, CKeyword *pres);
+int CKeyword_poll(CScope *scope, StreamCToken *tokens, CKeyword *pres, CContext *ctx);
 
 
 void CCompiler(char *path);
@@ -46,8 +54,11 @@ void CCompiler(char *path);
 CSymbol* CKeyword_create(CKeyword keyword);
 void CKeyword_destroy(void *data);
 
+
+CPrimitive CPrimitive_default(void);
+
 const char* CTypeFlag_str(CTypeFlag flag);
 const char* CStorageType_str(CStorageType storage);
 
-int CType_parse(CScope *scope, VecCToken tokens, size_t *i, CType *pres);
+int CType_parse(CScope *scope, StreamCToken *tokens, CType *pres, CStorageType *pstorage);
 CType* CType_alloc(CType base);

@@ -17,4 +17,4 @@ void Context_print_term(Context ctx);
 CContext CContext_init(const char *file, int line, int colon);
 CContext CContext_null(void);
 void CContext_print(CContext ctx);
-CContext CContext_polled(VecCToken vec, size_t i);
+CContext CContext_polled(StreamCToken *stream);

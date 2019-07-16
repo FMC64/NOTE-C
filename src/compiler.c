@@ -60,16 +60,6 @@ int VecCToken_at(VecCToken vec, size_t i, CToken *pres)
 	return 0;
 }
 
-int VecCToken_poll(VecCToken vec, size_t *i, CToken *pres)
-{
-	int res;
-
-	res = VecCToken_at(vec, *i, pres);
-	if (res)
-		(*i)++;
-	return res;
-}
-
 void VecCToken_destroy(VecCToken vec)
 {
 	size_t i;
@@ -77,6 +67,63 @@ void VecCToken_destroy(VecCToken vec)
 	for (i = 0; i < vec.count; i++)
 		CToken_destroy(vec.token[i]);
 	free(vec.token);
+}
+
+StreamCToken StreamCToken_init(VecCToken vec)
+{
+	StreamCToken res;
+
+	res.vec = vec;
+	res.i = 0;
+	return res;
+}
+
+void StreamCToken_begin(StreamCToken *stream)
+{
+	stream->i = 0;
+}
+
+void StreamCToken_end(StreamCToken *stream)
+{
+	if (stream->vec.count > 0)
+		stream->i = stream->vec.count - 1;
+	else
+		stream->i = 0;
+}
+
+int StreamCToken_forward(StreamCToken *stream)
+{
+	stream->i++;
+}
+
+int StreamCToken_back(StreamCToken *stream)
+{
+	stream->i--;
+}
+
+int StreamCToken_at(StreamCToken *stream, CToken *pres)
+{
+	return VecCToken_at(stream->vec, stream->i, pres);
+}
+
+int StreamCToken_poll(StreamCToken *stream, CToken *pres)
+{
+	int res;
+
+	res = StreamCToken_at(stream, pres);
+	if (res)
+		StreamCToken_forward(stream);
+	return res;
+}
+
+int StreamCToken_pollRev(StreamCToken *stream, CToken *pres)
+{
+	int res;
+
+	res = StreamCToken_at(stream, pres);
+	if (res)
+		StreamCToken_back(stream);
+	return res;
 }
 
 CBuf CBuf_init(char *input_path)

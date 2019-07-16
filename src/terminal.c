@@ -51,6 +51,21 @@ int printf(const char *fmt, ...)
 	return res;
 }
 
+int printf_error_part(CContext ctx, const char *fmt, ...)
+{
+	char buf[1024];
+	va_list args;
+	int res;
+
+	printf("error: ");
+	CContext_print(ctx);
+	va_start(args, fmt);
+	res = vsprintf(buf, fmt, args);
+	va_end(args);
+	buf_append(buf);
+	return res;
+}
+
 int printf_error(CContext ctx, const char *fmt, ...)
 {
 	char buf[1024];

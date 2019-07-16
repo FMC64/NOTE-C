@@ -19,6 +19,11 @@ typedef struct {
 } VecCToken;
 
 typedef struct {
+	VecCToken vec;
+	size_t i;
+} StreamCToken;
+
+typedef struct {
 	char *input_file_path;
 	int input_file;
 	VecCToken tokens;
@@ -88,24 +93,31 @@ typedef enum {
 
 typedef enum {
 	CTYPE_NONE = 0,
-	CTYPE_SIGNED = 1,
-	CTYPE_UNSIGNED = 2,
-	CTYPE_CONST = 4,
-	CTYPE_VOLATILE = 8,
+	CTYPE_CONST = 1,
+	CTYPE_VOLATILE = 2,
 } CTypeFlag;
 
 typedef enum {
-	CPRIMITIVE_INT,
+	CPRIMITIVE_NONE,
+	CPRIMITIVE_VOID,
+	CPRIMITIVE_UINT,
+	CPRIMITIVE_SINT,
 	CPRIMITIVE_FLOAT,
 	CPRIMIVITE_STRUCT,
 	CPRIMITIVE_FUNCTION
 } CPrimitiveType;
 
 typedef struct {
+	CPrimitiveType type;
+	void *data;	// For int / float -> bytes count, struct -> ptr to CStruct, function -> CFunction
+} CPrimitive;
+
+typedef struct {
 	CTypeFlag flags;
 	size_t referenceLevel;
-	CPrimitiveType primitiveType;
-	void *primitiveData;	// For int / float -> bytes count, struct -> ptr to CStruct, function -> CFunction
+	size_t arrayLevel;
+	size_t *arraySize;
+	CPrimitive primitive;
 } CType;
 
 typedef enum {
@@ -126,7 +138,6 @@ typedef struct {
 	size_t size;
 	size_t variableCount;
 	CVariable *variable;
-	int isUnnamed;
 } CStruct;	// I think this could be used for unions as well
 
 typedef struct {

@@ -194,18 +194,19 @@ int CParser_exec(CParser *parser)
 {
 	CScope *scope = CScope_create();
 	int res = 1;
-	size_t i = 0;
+	StreamCToken tokens;
 	CKeyword keyword;
 
 	if (!CBuf_readTokens(&parser->buf))
 		return 0;
+	tokens = StreamCToken_init(parser->buf.tokens);
 	if (!populate_keywords(scope))
 		return 0;
-	while (VecCToken_at(parser->buf.tokens, i, NULL)) {
-		if (CKeyword_poll(scope, parser->buf.tokens, &i, &keyword)) {
+	while (StreamCToken_at(&tokens, NULL)) {
+		if (CKeyword_poll(scope, &tokens, &keyword, NULL)) {
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
-				if (!CType_parse(scope, parser->buf.tokens, &i, NULL)) {
+				if (!CType_parse(scope, &tokens, NULL, NULL)) {
 					res = 0;
 					goto end_loop;
 				}
@@ -225,18 +226,20 @@ void CParser_destroy(CParser parser)
 	return;
 }
 
-int CKeyword_poll(CScope *scope, VecCToken tokens, size_t *i, CKeyword *pres)
+int CKeyword_poll(CScope *scope, StreamCToken *tokens, CKeyword *pres, CContext *ctx)
 {
 	CToken cur;
 	CSymbol *sym;
 
-	if (!VecCToken_at(tokens, *i, &cur))
+	if (!StreamCToken_at(tokens, &cur))
 		return 0;
 	if (!CScope_resolve(scope, cur.str, (void**)&sym))
 		return 0;
 	if (sym->type != CSYMBOL_KEYWORD)
 		return 0;
 	*pres = (CKeyword)sym->data;
-	(*i)++;
+	if (ctx != NULL)
+		*ctx = cur.ctx;
+	StreamCToken_forward(tokens);
 	return 1;
 }
