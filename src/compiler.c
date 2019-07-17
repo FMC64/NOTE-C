@@ -126,6 +126,42 @@ int StreamCToken_pollRev(StreamCToken *stream, CToken *pres)
 	return res;
 }
 
+CContext StreamCToken_lastCtx(StreamCToken *stream)
+{
+	if (stream->vec.count > 0)
+		return stream->vec.token[stream->vec.count - 1].ctx;
+	else
+		return CContext_null();
+}
+
+int StreamCToken_pollStr(StreamCToken *tokens, const char *str, CContext *ctx)
+{
+	CToken cur;
+	int res;
+
+	if (!StreamCToken_at(tokens, &cur)) {
+		if (ctx != NULL)
+			*ctx = StreamCToken_lastCtx(tokens);
+		return 0;
+	}
+	if (ctx != NULL)
+		*ctx = cur.ctx;
+	res = streq(cur.str, str);
+	if (res)
+		StreamCToken_forward(tokens);
+	return res;
+}
+
+int StreamCToken_pollLpar(StreamCToken *tokens, CContext *ctx)
+{
+	return StreamCToken_pollStr(tokens, "(", ctx);
+}
+
+int StreamCToken_pollRpar(StreamCToken *tokens, CContext *ctx)
+{
+	return StreamCToken_pollStr(tokens, ")", ctx);
+}
+
 CBuf CBuf_init(char *input_path)
 {
 	const FONTCHARACTER *path_real = string_to_fontchar(input_path);
@@ -152,28 +188,40 @@ static int streq_part_in_arr(const char *str, const char **arr, const char **pfo
 	return 0;
 }
 
-static char lower(char to_lower)
+char char_lower(char to_lower)
 {
 	if ((to_lower >= 'A') && (to_lower <= 'Z'))
 		to_lower -= 32;
 	return to_lower;
 }
 
-static int is_letter(char to_test)
+int char_is_letter(char to_test)
 {
-	to_test = lower(to_test);
+	to_test = char_lower(to_test);
 
 	return (to_test >= 'a') && (to_test <= 'z');
 }
 
-static int is_digit(char to_test)
+int char_is_digit(char to_test)
 {
 	return (to_test >= '0') && (to_test <= '9');
 }
 
-static int is_identifier(char to_test)
+int char_is_identifier(char to_test)
 {
-	return is_letter(to_test) || is_digit(to_test) || (to_test == '_');
+	return char_is_letter(to_test) || char_is_digit(to_test) || (to_test == '_');
+}
+
+int str_is_identifier(const char *str)
+{
+	size_t i;
+
+	if (char_is_digit(str[0]))
+		return 0;
+	for (i = 0; str[i] != 0; i++)
+		if (!char_is_identifier(str[i]))
+			return 0;
+	return 1;
 }
 
 static char* get_identifier(char *str, size_t *i)
@@ -181,7 +229,7 @@ static char* get_identifier(char *str, size_t *i)
 	char *res;
 	size_t size;
 
-	for (size = 0; is_identifier(str[*i + size]); size++);
+	for (size = 0; char_is_identifier(str[*i + size]); size++);
 
 	res = (char*)malloc((size + 1) * sizeof(char));
 	memcpy(res, &str[*i], size);

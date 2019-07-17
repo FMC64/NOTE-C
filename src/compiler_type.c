@@ -1,13 +1,40 @@
 
 #include "headers.h"
 
+CReference CReference_default(void)
+{
+	CReference res;
+
+	res.level = 0;
+	res.arrayCount = 0;
+	res.array = NULL;
+	return res;
+}
+
+void CReference_destroy(CReference reference)
+{
+	free(reference.array);
+}
+
 CPrimitive CPrimitive_default(void)
 {
 	CPrimitive res;
 
 	res.type = CPRIMITIVE_NONE;
 	res.data = NULL;
+	res.isDataRef = 0;
 	return res;
+}
+
+void CPrimitive_destroy(CPrimitive primitive)
+{
+	if (primitive.isDataRef)
+		return;
+	switch (primitive.type) {
+	case CPRIMITIVE_FUNCTION:
+		CFunction_destroy(primitive.data);
+		break;
+	}
 }
 
 CType CType_default(void)
@@ -15,9 +42,7 @@ CType CType_default(void)
 	CType res;
 
 	res.flags = 0;
-	res.referenceLevel = 0;
-	res.arrayLevel = 0;
-	res.arraySize = NULL;
+	res.ref = CReference_default();
 	res.primitive = CPrimitive_default();
 	return res;
 }
@@ -327,6 +352,10 @@ static int poll_primitive(CScope *scope, StreamCToken *tokens, CPrimitive *pres)
 		pres->type = get_int_primitive_type(flags);
 		pres->data = (void*)2;
 		return 1;
+	} else if (flags & CPRIMITIVE_FLAG_INT) {
+		pres->type = get_int_primitive_type(flags);
+		pres->data = (void*)4;
+		return 1;
 	} else if (longCount == 1) {
 		pres->type = get_int_primitive_type(flags);
 		pres->data = (void*)4;
@@ -355,19 +384,142 @@ static int poll_primitive(CScope *scope, StreamCToken *tokens, CPrimitive *pres)
 	}
 }
 
-int CType_parse(CScope *scope, StreamCToken *tokens, CType *pres, CStorageType *pstorage)
+static size_t poll_reference_level(StreamCToken *tokens)
+{
+	CToken cur;
+	size_t res = 0;
+
+	while (StreamCToken_at(tokens, &cur)) {
+		if (streq(cur.str, "*")) {
+			res++;
+			StreamCToken_forward(tokens);
+		} else
+			break;
+	}
+	return res;
+}
+
+static int poll_reference(StreamCToken *tokens, char **pname, CReference *acc)
+{
+	CToken cur;
+	char *err_msg = "expected name for declaration";
+	//char *err_msg_fun = "expected name for function declaration";
+
+	acc->level += poll_reference_level(tokens);
+	if (!StreamCToken_poll(tokens, &cur)) {
+		printf_error(StreamCToken_lastCtx(tokens), err_msg);
+		return 0;
+	}
+	if (str_is_identifier(cur.str))
+		*pname = cur.str;
+	else
+		StreamCToken_back(tokens);
+	return 1;
+}
+
+static CFunction* CFunction_alloc(CFunction base)
+{
+	CFunction *res = (CFunction*)malloc(sizeof(CFunction));
+
+	*res = base;
+	return res;
+}
+
+static void CFunction_addArg(CFunction *func, CVariable *to_add)
+{
+	size_t cur = func->argCount++;
+
+	func->arg = (CVariable**)realloc(func->arg, func->argCount * sizeof(CVariable*));
+	func->arg[cur] = to_add;
+}
+
+void CFunction_destroy(CFunction *func)
+{
+	size_t i;
+
+	CType_destroy(func->returnType);
+	for (i = 0; i < func->argCount; i++)
+		CVariable_destroy(func->arg[i]);
+	free(func->arg);
+	free(func);
+}
+
+static CType* CType_initFunction(CType *returnType, CReference funReference)
 {
 	CType res = CType_default();
+	CFunction fun;
 
-	if (!poll_attributes(scope, tokens, &res.flags, pstorage))
+	fun.returnType = returnType;
+	fun.argCount = 0;
+	fun.arg = NULL;
+	res.ref = funReference;
+	res.primitive.type = CPRIMITIVE_FUNCTION;
+	res.primitive.data = CFunction_alloc(fun);
+	return CType_alloc(res);
+}
+
+static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CType *pres)
+{
+	CVariable *var;
+	CToken cur;
+	CContext ctx;
+	int forceContinue = 0;
+
+	if (!hasPolled)
+		if (!StreamCToken_pollLpar(tokens, &ctx)) {
+			printf_error(ctx, "missing '(' for declaring function arguments");
+			return 0;
+		}
+	while ((!StreamCToken_pollRpar(tokens, &ctx)) || forceContinue) {
+		if (!CVariable_parse(scope, tokens, &var))
+			return 0;
+		CFunction_addArg(pres->primitive.data, var);
+		forceContinue = StreamCToken_pollStr(tokens, ",", NULL);
+	}
+	return 1;
+}
+
+static CVariable CVariable_default(void)
+{
+	CVariable res;
+
+	res.name = NULL;
+	res.address = 0;
+	res.storage = CSTORAGE_DEFAULT;
+	res.type = NULL;
+	return res;
+}
+
+static CVariable* CVariable_alloc(CVariable base)
+{
+	CVariable *res = (CVariable*)malloc(sizeof(CVariable));
+
+	*res = base;
+	return res;
+}
+
+int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres)
+{
+	CVariable *res = CVariable_alloc(CVariable_default());
+	char *name;
+
+	if (!CType_parse(scope, tokens, &name, &res->type, &res->storage)) {
+		CVariable_destroy(res);
 		return 0;
-	if (!poll_primitive(scope, tokens, &res.primitive))
-		return 0;
-	terminal_flush();
-	printf("flags: %d\nref: %u\nprim: %d, primdata: %p\n", res.flags, res.referenceLevel, res.primitive.type, res.primitive.data);
-	terminal_show();
+	}
+	if (name != NULL)
+		res->name = strdup(name);
+	else
+		res->name = NULL;
 	*pres = res;
 	return 1;
+}
+
+void CVariable_destroy(CVariable *variable)
+{
+	free(variable->name);
+	CType_destroy(variable->type);
+	free(variable);
 }
 
 CType* CType_alloc(CType base)
@@ -376,4 +528,135 @@ CType* CType_alloc(CType base)
 
 	*res = base;
 	return res;
+}
+
+int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType **pres, CStorageType *pstorage)
+{
+	CType *res = CType_alloc(CType_default());
+	int isFun = 0;
+	int hasPolled;
+	CReference funRef = CReference_default();
+	CContext ctx;
+
+	*pname = NULL;
+	if (!poll_attributes(scope, tokens, &res->flags, pstorage))
+		goto CType_parse_error;
+	if (!poll_primitive(scope, tokens, &res->primitive))
+		goto CType_parse_error;
+	if (!poll_reference(tokens, pname, &res->ref))
+		goto CType_parse_error;
+	isFun = StreamCToken_pollLpar(tokens, NULL);
+	if (isFun) {
+		if (!poll_reference(tokens, pname, &funRef))
+			goto CType_parse_error;
+		if (!StreamCToken_pollRpar(tokens, &ctx)) {
+			printf_error(ctx, "missing ')' for closing function name");
+			goto CType_parse_error;
+		}
+		res = CType_initFunction(res, funRef);
+	}
+	hasPolled = StreamCToken_pollLpar(tokens, NULL);
+	if (hasPolled || isFun)
+		if (!poll_function(scope, tokens, hasPolled, res))
+			goto CType_parse_error;
+	if (*pname == NULL)
+		if (!poll_reference(tokens, pname, &res->ref))
+			goto CType_parse_error;
+	*pres = res;
+	return 1;
+
+	CType_parse_error:
+	CType_destroy(res);
+	return 0;
+}
+
+static void print_tabs(size_t count)
+{
+	size_t i;
+
+	for (i = 0; i < count; i++)
+		printf("  ");
+}
+
+static void CType_print_actual(CType *type, size_t depth);
+
+static void CVariable_print(CVariable *var, size_t depth)
+{
+	print_tabs(depth);
+	printf("name: '%s'\n", var->name != NULL ? var->name : "(null)");
+	print_tabs(depth);
+	printf("address: %u\n", var->address);
+	print_tabs(depth);
+	printf("storage: %u\n", var->storage);
+	CType_print_actual(var->type, depth + 1);
+}
+
+static void CFunction_print(CFunction *func, size_t depth)
+{
+	size_t i;
+
+	print_tabs(depth);
+	printf("return:\n");
+	CType_print_actual(func->returnType, depth + 1);
+	for (i = 0; i < func->argCount; i++) {
+		print_tabs(depth);
+		printf("arg #%u:\n", i);
+		CVariable_print(func->arg[i], depth + 1);
+	}
+}
+
+static void CType_print_actual(CType *type, size_t depth)
+{
+	size_t i;
+
+	print_tabs(depth);
+	printf("flags: %d\n", type->flags);
+	print_tabs(depth);
+	printf("refLevel: %u\n", type->ref.level);
+	print_tabs(depth);
+	printf("array (%u): ", type->ref.arrayCount);
+	for (i = 0; i < type->ref.arrayCount; i++) {
+		if (type->ref.array[i].isUndef)
+			printf("[]");
+		else
+			printf("[%u]", type->ref.array[i].size);
+	}
+	printf("\n");
+	print_tabs(depth);
+	printf("Primitive: ");
+	switch (type->primitive.type) {
+	case CPRIMITIVE_VOID:
+		printf("void");
+		break;
+	case CPRIMITIVE_UINT:
+		printf("uint: %u", type->primitive.data);
+		break;
+	case CPRIMITIVE_SINT:
+		printf("sint: %u", type->primitive.data);
+		break;
+	case CPRIMITIVE_FLOAT:
+		printf("float: %u", type->primitive.data);
+		break;
+	case CPRIMITIVE_FUNCTION:
+		printf("function:\n", type->primitive.data);
+		CFunction_print(type->primitive.data, depth + 1);
+		break;
+	}
+	printf("\n");
+}
+
+static void CType_print(CType *type)
+{
+	terminal_flush();
+	CType_print_actual(type, 0);
+	terminal_show();
+}
+
+void CType_destroy(CType *type)
+{
+	if (type == NULL)
+		return;
+	CReference_destroy(type->ref);
+	CPrimitive_destroy(type->primitive);
+	free(type);
 }

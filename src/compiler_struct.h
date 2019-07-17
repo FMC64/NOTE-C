@@ -110,13 +110,23 @@ typedef enum {
 typedef struct {
 	CPrimitiveType type;
 	void *data;	// For int / float -> bytes count, struct -> ptr to CStruct, function -> CFunction
+	int isDataRef;
 } CPrimitive;
 
 typedef struct {
+	int isUndef;
+	size_t size;
+} CArrayColumn;
+
+typedef struct {
+	size_t level;
+	size_t arrayCount;
+	CArrayColumn *array;
+} CReference;
+
+typedef struct {
 	CTypeFlag flags;
-	size_t referenceLevel;
-	size_t arrayLevel;
-	size_t *arraySize;
+	CReference ref;
 	CPrimitive primitive;
 } CType;
 
@@ -129,9 +139,10 @@ typedef enum {
 } CStorageType;
 
 typedef struct {
+	char *name;
 	size_t address;
-	CType type;
 	CStorageType storage;
+	CType *type;
 } CVariable;
 
 typedef struct {
@@ -141,7 +152,7 @@ typedef struct {
 } CStruct;	// I think this could be used for unions as well
 
 typedef struct {
-	CType returnType;
+	CType *returnType;
 	size_t argCount;
-	CType *arg;
+	CVariable **arg;
 } CFunction;

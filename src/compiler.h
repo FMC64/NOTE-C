@@ -19,10 +19,20 @@ int StreamCToken_back(StreamCToken *stream);
 int StreamCToken_at(StreamCToken *stream, CToken *pres);
 int StreamCToken_poll(StreamCToken *stream, CToken *pres);
 int StreamCToken_pollRev(StreamCToken *stream, CToken *pres);
+CContext StreamCToken_lastCtx(StreamCToken *stream);
+int StreamCToken_pollStr(StreamCToken *tokens, const char *str, CContext *ctx);
+int StreamCToken_pollLpar(StreamCToken *tokens, CContext *ctx);
+int StreamCToken_pollRpar(StreamCToken *tokens, CContext *ctx);
 
 CBuf CBuf_init(char *input_path);
 int CBuf_readTokens(CBuf *buf);
 void CBuf_destroy(CBuf buf);
+
+char char_lower(char to_lower);
+int char_is_letter(char to_test);
+int char_is_digit(char to_test);
+int char_is_identifier(char to_test);
+int str_is_identifier(const char *str);
 
 
 CScope* CScope_create(void);
@@ -56,9 +66,20 @@ void CKeyword_destroy(void *data);
 
 
 CPrimitive CPrimitive_default(void);
+void CPrimitive_destroy(CPrimitive primitive);
+
 
 const char* CTypeFlag_str(CTypeFlag flag);
 const char* CStorageType_str(CStorageType storage);
 
-int CType_parse(CScope *scope, StreamCToken *tokens, CType *pres, CStorageType *pstorage);
+void CPrimitive_destroy(CPrimitive primitive);
+
+void CFunction_destroy(CFunction *func);
+
+int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres);
+void CVariable_destroy(CVariable *variable);
+
+int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType **pres, CStorageType *pstorage);
 CType* CType_alloc(CType base);
+void CType_print(CType *type);
+void CType_destroy(CType *type);
