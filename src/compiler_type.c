@@ -377,7 +377,7 @@ static int poll_primitive(CScope *scope, StreamCToken *tokens, CPrimitive *pres)
 		pres->data = (void*)4;
 		return 1;
 	} else {
-		printf_error_part(ctx, "unsupported type '");
+		printf_error_part(StreamCToken_atCtx(tokens), "unsupported type '");
 		print_primitive(flags, longCount);
 		printf("'\n\n");
 		return 0;
@@ -425,11 +425,11 @@ static CFunction* CFunction_alloc(CFunction base)
 	return res;
 }
 
-static void CFunction_addArg(CFunction *func, CVariable *to_add)
+static void CFunction_addArg(CFunction *func, CType *to_add)
 {
 	size_t cur = func->argCount++;
 
-	func->arg = (CVariable**)realloc(func->arg, func->argCount * sizeof(CVariable*));
+	func->arg = (CType**)realloc(func->arg, func->argCount * sizeof(CType*));
 	func->arg[cur] = to_add;
 }
 
@@ -439,7 +439,7 @@ void CFunction_destroy(CFunction *func)
 
 	CType_destroy(func->returnType);
 	for (i = 0; i < func->argCount; i++)
-		CVariable_destroy(func->arg[i]);
+		CType_destroy(func->arg[i]);
 	free(func->arg);
 	free(func);
 }
@@ -458,12 +458,14 @@ static CType* CType_initFunction(CType *returnType, CReference funReference)
 	return CType_alloc(res);
 }
 
-static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CType *pres)
+static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CType *pres, VecStr *pargsName)
 {
-	CVariable *var;
+	CType *type;
+	VecStr args = VecStr_init();
 	CToken cur;
 	CContext ctx;
 	int forceContinue = 0;
+	char *name;
 
 	if (!hasPolled)
 		if (!StreamCToken_pollLpar(tokens, &ctx)) {
@@ -471,11 +473,18 @@ static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CTy
 			return 0;
 		}
 	while ((!StreamCToken_pollRpar(tokens, &ctx)) || forceContinue) {
-		if (!CVariable_parse(scope, tokens, &var))
+		if (!CType_parse(scope, tokens, &name, &type, NULL, NULL)) {
+			VecStr_destroy(args);
 			return 0;
-		CFunction_addArg(pres->primitive.data, var);
+		}
+		CFunction_addArg(pres->primitive.data, type);
+		VecStr_add(&args, strdup(name));
 		forceContinue = StreamCToken_pollStr(tokens, ",", NULL);
 	}
+	if (pargsName != NULL)
+		*pargsName = args;
+	else
+		VecStr_destroy(args);
 	return 1;
 }
 
@@ -498,12 +507,12 @@ static CVariable* CVariable_alloc(CVariable base)
 	return res;
 }
 
-int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres)
+int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres, VecStr *pargs)
 {
 	CVariable *res = CVariable_alloc(CVariable_default());
 	char *name;
 
-	if (!CType_parse(scope, tokens, &name, &res->type, &res->storage)) {
+	if (!CType_parse(scope, tokens, &name, &res->type, &res->storage, pargs)) {
 		CVariable_destroy(res);
 		return 0;
 	}
@@ -530,7 +539,7 @@ CType* CType_alloc(CType base)
 	return res;
 }
 
-int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType **pres, CStorageType *pstorage)
+int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType **pres, CStorageType *pstorage, VecStr *pargsName)
 {
 	CType *res = CType_alloc(CType_default());
 	int isFun = 0;
@@ -557,7 +566,7 @@ int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType **pres,
 	}
 	hasPolled = StreamCToken_pollLpar(tokens, NULL);
 	if (hasPolled || isFun)
-		if (!poll_function(scope, tokens, hasPolled, res))
+		if (!poll_function(scope, tokens, hasPolled, res, pargsName))
 			goto CType_parse_error;
 	if (*pname == NULL)
 		if (!poll_reference(tokens, pname, &res->ref))
@@ -601,7 +610,7 @@ static void CFunction_print(CFunction *func, size_t depth)
 	for (i = 0; i < func->argCount; i++) {
 		print_tabs(depth);
 		printf("arg #%u:\n", i);
-		CVariable_print(func->arg[i], depth + 1);
+		CType_print_actual(func->arg[i], depth + 1);
 	}
 }
 

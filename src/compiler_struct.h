@@ -108,9 +108,9 @@ typedef enum {
 } CPrimitiveType;
 
 typedef struct {
-	CPrimitiveType type;
 	void *data;	// For int / float -> bytes count, struct -> ptr to CStruct, function -> CFunction
-	int isDataRef;
+	char type;	// CPrimitiveType
+	char isDataRef;
 } CPrimitive;
 
 typedef struct {
@@ -119,8 +119,8 @@ typedef struct {
 } CArrayColumn;
 
 typedef struct {
-	size_t level;
-	size_t arrayCount;
+	unsigned short level;		// Can't go much shorter because of 32 bits alignment
+	unsigned short arrayCount;
 	CArrayColumn *array;
 } CReference;
 
@@ -154,5 +154,5 @@ typedef struct {
 typedef struct {
 	CType *returnType;
 	size_t argCount;
-	CVariable **arg;
+	CType **arg;
 } CFunction;

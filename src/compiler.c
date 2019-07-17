@@ -134,6 +134,14 @@ CContext StreamCToken_lastCtx(StreamCToken *stream)
 		return CContext_null();
 }
 
+CContext StreamCToken_atCtx(StreamCToken *stream)
+{
+	if (stream->i < stream->vec.count)
+		return stream->vec.token[stream->i].ctx;
+	else
+		return StreamCToken_lastCtx(stream);
+}
+
 int StreamCToken_pollStr(StreamCToken *tokens, const char *str, CContext *ctx)
 {
 	CToken cur;

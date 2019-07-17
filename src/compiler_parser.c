@@ -208,11 +208,11 @@ int CParser_exec(CParser *parser)
 		if (CKeyword_poll(scope, &tokens, &keyword, NULL)) {
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
-				if (!CType_parse(scope, &tokens, &name, &type, NULL)) {
+				if (!CType_parse(scope, &tokens, &name, &type, NULL, NULL)) {
 					res = 0;
 					goto end_loop;
 				}
-				CType_print(type);
+				//CType_print(type);
 				memcheck_stats();
 				CType_destroy(type);
 				memcheck_stats();

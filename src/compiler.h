@@ -20,6 +20,7 @@ int StreamCToken_at(StreamCToken *stream, CToken *pres);
 int StreamCToken_poll(StreamCToken *stream, CToken *pres);
 int StreamCToken_pollRev(StreamCToken *stream, CToken *pres);
 CContext StreamCToken_lastCtx(StreamCToken *stream);
+CContext StreamCToken_atCtx(StreamCToken *stream);
 int StreamCToken_pollStr(StreamCToken *tokens, const char *str, CContext *ctx);
 int StreamCToken_pollLpar(StreamCToken *tokens, CContext *ctx);
 int StreamCToken_pollRpar(StreamCToken *tokens, CContext *ctx);
@@ -76,10 +77,10 @@ void CPrimitive_destroy(CPrimitive primitive);
 
 void CFunction_destroy(CFunction *func);
 
-int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres);
+int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres, VecStr *pargs);
 void CVariable_destroy(CVariable *variable);
 
-int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType **pres, CStorageType *pstorage);
+int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType **pres, CStorageType *pstorage, VecStr *pargsName);
 CType* CType_alloc(CType base);
 void CType_print(CType *type);
 void CType_destroy(CType *type);
