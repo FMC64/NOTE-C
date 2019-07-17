@@ -197,7 +197,7 @@ int CParser_exec(CParser *parser)
 	StreamCToken tokens;
 	CKeyword keyword;
 	char *name;
-	CType *type;
+	CTypeFull *type;
 
 	if (!CBuf_readTokens(&parser->buf))
 		return 0;
@@ -208,13 +208,13 @@ int CParser_exec(CParser *parser)
 		if (CKeyword_poll(scope, &tokens, &keyword, NULL)) {
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
-				if (!CType_parse(scope, &tokens, &name, &type, NULL, NULL)) {
+				if (!CTypeFull_parse(scope, &tokens, &name, &type, NULL, NULL)) {
 					res = 0;
 					goto end_loop;
 				}
-				//CType_print(type);
+				CTypeFull_print(type);
 				memcheck_stats();
-				CType_destroy(type);
+				CTypeFull_destroy(type);
 				memcheck_stats();
 				break;
 			}

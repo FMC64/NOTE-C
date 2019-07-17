@@ -37,9 +37,9 @@ void CPrimitive_destroy(CPrimitive primitive)
 	}
 }
 
-CType CType_default(void)
+CTypeFull CTypeFull_default(void)
 {
-	CType res;
+	CTypeFull res;
 
 	res.flags = 0;
 	res.ref = CReference_default();
@@ -47,12 +47,12 @@ CType CType_default(void)
 	return res;
 }
 
-static const struct {CKeyword keyword; CTypeFlag flag;} keyword_flag[] = {
+static const struct {CKeyword keyword; CTypeFullFlag flag;} keyword_flag[] = {
 {CKEYWORD_CONST, CTYPE_CONST},
 {CKEYWORD_VOLATILE, CTYPE_VOLATILE},
 {CKEYWORD_NONE, CTYPE_NONE}};
 
-static CKeyword CTypeFlag_keyword(CTypeFlag flag)
+static CKeyword CTypeFullFlag_keyword(CTypeFullFlag flag)
 {
 	size_t i;
 
@@ -62,12 +62,12 @@ static CKeyword CTypeFlag_keyword(CTypeFlag flag)
 	return CKEYWORD_NONE;
 }
 
-const char* CTypeFlag_str(CTypeFlag flag)
+const char* CTypeFullFlag_str(CTypeFullFlag flag)
 {
-	return CKeyword_str(CTypeFlag_keyword(flag));
+	return CKeyword_str(CTypeFullFlag_keyword(flag));
 }
 
-static int get_flag(CKeyword keyword, CTypeFlag *flag)
+static int get_flag(CKeyword keyword, CTypeFullFlag *flag)
 {
 	size_t i;
 
@@ -114,10 +114,10 @@ static int get_storage(CKeyword keyword, CStorageType *storage)
 	return 0;
 }
 
-static int poll_attributes(CScope *scope, StreamCToken *tokens, CTypeFlag *flags, CStorageType *pstorage)
+static int poll_attributes(CScope *scope, StreamCToken *tokens, CTypeFullFlag *flags, CStorageType *pstorage)
 {
 	CKeyword keyword;
-	CTypeFlag flag;
+	CTypeFullFlag flag;
 	CStorageType storage;
 	CContext ctx;
 
@@ -127,7 +127,7 @@ static int poll_attributes(CScope *scope, StreamCToken *tokens, CTypeFlag *flags
 	while (CKeyword_poll(scope, tokens, &keyword, &ctx)) {
 		if (get_flag(keyword, &flag)) {
 			if (*flags & flag) {
-				printf_error(ctx, "redeclaration of flag '%s'", CTypeFlag_str(flag));
+				printf_error(ctx, "redeclaration of flag '%s'", CTypeFullFlag_str(flag));
 				return 0;
 			}
 			*flags |= flag;
@@ -425,11 +425,11 @@ static CFunction* CFunction_alloc(CFunction base)
 	return res;
 }
 
-static void CFunction_addArg(CFunction *func, CType *to_add)
+static void CFunction_addArg(CFunction *func, CTypeFull *to_add)
 {
 	size_t cur = func->argCount++;
 
-	func->arg = (CType**)realloc(func->arg, func->argCount * sizeof(CType*));
+	func->arg = (CTypeFull**)realloc(func->arg, func->argCount * sizeof(CTypeFull*));
 	func->arg[cur] = to_add;
 }
 
@@ -437,16 +437,16 @@ void CFunction_destroy(CFunction *func)
 {
 	size_t i;
 
-	CType_destroy(func->returnType);
+	CTypeFull_destroy(func->returnType);
 	for (i = 0; i < func->argCount; i++)
-		CType_destroy(func->arg[i]);
+		CTypeFull_destroy(func->arg[i]);
 	free(func->arg);
 	free(func);
 }
 
-static CType* CType_initFunction(CType *returnType, CReference funReference)
+static CTypeFull* CTypeFull_initFunction(CTypeFull *returnType, CReference funReference)
 {
-	CType res = CType_default();
+	CTypeFull res = CTypeFull_default();
 	CFunction fun;
 
 	fun.returnType = returnType;
@@ -455,12 +455,12 @@ static CType* CType_initFunction(CType *returnType, CReference funReference)
 	res.ref = funReference;
 	res.primitive.type = CPRIMITIVE_FUNCTION;
 	res.primitive.data = CFunction_alloc(fun);
-	return CType_alloc(res);
+	return CTypeFull_alloc(res);
 }
 
-static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CType *pres, VecStr *pargsName)
+static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CTypeFull *pres, VecStr *pargsName)
 {
-	CType *type;
+	CTypeFull *type;
 	VecStr args = VecStr_init();
 	CToken cur;
 	CContext ctx;
@@ -473,12 +473,12 @@ static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CTy
 			return 0;
 		}
 	while ((!StreamCToken_pollRpar(tokens, &ctx)) || forceContinue) {
-		if (!CType_parse(scope, tokens, &name, &type, NULL, NULL)) {
+		if (!CTypeFull_parse(scope, tokens, &name, &type, NULL, NULL)) {
 			VecStr_destroy(args);
 			return 0;
 		}
 		CFunction_addArg(pres->primitive.data, type);
-		VecStr_add(&args, strdup(name));
+		VecStr_add(&args, name != NULL ? strdup(name) : name);
 		forceContinue = StreamCToken_pollStr(tokens, ",", NULL);
 	}
 	if (pargsName != NULL)
@@ -512,7 +512,7 @@ int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres, VecSt
 	CVariable *res = CVariable_alloc(CVariable_default());
 	char *name;
 
-	if (!CType_parse(scope, tokens, &name, &res->type, &res->storage, pargs)) {
+	if (!CTypeFull_parse(scope, tokens, &name, &res->type, &res->storage, pargs)) {
 		CVariable_destroy(res);
 		return 0;
 	}
@@ -527,21 +527,21 @@ int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres, VecSt
 void CVariable_destroy(CVariable *variable)
 {
 	free(variable->name);
-	CType_destroy(variable->type);
+	CTypeFull_destroy(variable->type);
 	free(variable);
 }
 
-CType* CType_alloc(CType base)
+CTypeFull* CTypeFull_alloc(CTypeFull base)
 {
-	CType *res = (CType*)malloc(sizeof(CType));
+	CTypeFull *res = (CTypeFull*)malloc(sizeof(CTypeFull));
 
 	*res = base;
 	return res;
 }
 
-int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType **pres, CStorageType *pstorage, VecStr *pargsName)
+int CTypeFull_parse(CScope *scope, StreamCToken *tokens, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName)
 {
-	CType *res = CType_alloc(CType_default());
+	CTypeFull *res = CTypeFull_alloc(CTypeFull_default());
 	int isFun = 0;
 	int hasPolled;
 	CReference funRef = CReference_default();
@@ -549,33 +549,33 @@ int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType **pres,
 
 	*pname = NULL;
 	if (!poll_attributes(scope, tokens, &res->flags, pstorage))
-		goto CType_parse_error;
+		goto CTypeFull_parse_error;
 	if (!poll_primitive(scope, tokens, &res->primitive))
-		goto CType_parse_error;
+		goto CTypeFull_parse_error;
 	if (!poll_reference(tokens, pname, &res->ref))
-		goto CType_parse_error;
+		goto CTypeFull_parse_error;
 	isFun = StreamCToken_pollLpar(tokens, NULL);
 	if (isFun) {
 		if (!poll_reference(tokens, pname, &funRef))
-			goto CType_parse_error;
+			goto CTypeFull_parse_error;
 		if (!StreamCToken_pollRpar(tokens, &ctx)) {
 			printf_error(ctx, "missing ')' for closing function name");
-			goto CType_parse_error;
+			goto CTypeFull_parse_error;
 		}
-		res = CType_initFunction(res, funRef);
+		res = CTypeFull_initFunction(res, funRef);
 	}
 	hasPolled = StreamCToken_pollLpar(tokens, NULL);
 	if (hasPolled || isFun)
 		if (!poll_function(scope, tokens, hasPolled, res, pargsName))
-			goto CType_parse_error;
+			goto CTypeFull_parse_error;
 	if (*pname == NULL)
 		if (!poll_reference(tokens, pname, &res->ref))
-			goto CType_parse_error;
+			goto CTypeFull_parse_error;
 	*pres = res;
 	return 1;
 
-	CType_parse_error:
-	CType_destroy(res);
+	CTypeFull_parse_error:
+	CTypeFull_destroy(res);
 	return 0;
 }
 
@@ -587,7 +587,7 @@ static void print_tabs(size_t count)
 		printf("  ");
 }
 
-static void CType_print_actual(CType *type, size_t depth);
+static void CTypeFull_print_actual(CTypeFull *type, size_t depth);
 
 static void CVariable_print(CVariable *var, size_t depth)
 {
@@ -597,7 +597,7 @@ static void CVariable_print(CVariable *var, size_t depth)
 	printf("address: %u\n", var->address);
 	print_tabs(depth);
 	printf("storage: %u\n", var->storage);
-	CType_print_actual(var->type, depth + 1);
+	CTypeFull_print_actual(var->type, depth + 1);
 }
 
 static void CFunction_print(CFunction *func, size_t depth)
@@ -606,15 +606,15 @@ static void CFunction_print(CFunction *func, size_t depth)
 
 	print_tabs(depth);
 	printf("return:\n");
-	CType_print_actual(func->returnType, depth + 1);
+	CTypeFull_print_actual(func->returnType, depth + 1);
 	for (i = 0; i < func->argCount; i++) {
 		print_tabs(depth);
 		printf("arg #%u:\n", i);
-		CType_print_actual(func->arg[i], depth + 1);
+		CTypeFull_print_actual(func->arg[i], depth + 1);
 	}
 }
 
-static void CType_print_actual(CType *type, size_t depth)
+static void CTypeFull_print_actual(CTypeFull *type, size_t depth)
 {
 	size_t i;
 
@@ -654,14 +654,14 @@ static void CType_print_actual(CType *type, size_t depth)
 	printf("\n");
 }
 
-static void CType_print(CType *type)
+static void CTypeFull_print(CTypeFull *type)
 {
 	terminal_flush();
-	CType_print_actual(type, 0);
+	CTypeFull_print_actual(type, 0);
 	terminal_show();
 }
 
-void CType_destroy(CType *type)
+void CTypeFull_destroy(CTypeFull *type)
 {
 	if (type == NULL)
 		return;

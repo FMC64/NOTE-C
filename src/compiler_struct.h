@@ -95,7 +95,7 @@ typedef enum {
 	CTYPE_NONE = 0,
 	CTYPE_CONST = 1,
 	CTYPE_VOLATILE = 2,
-} CTypeFlag;
+} CTypeFullFlag;
 
 typedef enum {
 	CPRIMITIVE_NONE,
@@ -125,10 +125,10 @@ typedef struct {
 } CReference;
 
 typedef struct {
-	CTypeFlag flags;
+	CTypeFullFlag flags;
 	CReference ref;
 	CPrimitive primitive;
-} CType;
+} CTypeFull;
 
 typedef enum {
 	CSTORAGE_DEFAULT,
@@ -142,7 +142,7 @@ typedef struct {
 	char *name;
 	size_t address;
 	CStorageType storage;
-	CType *type;
+	CTypeFull *type;
 } CVariable;
 
 typedef struct {
@@ -152,7 +152,7 @@ typedef struct {
 } CStruct;	// I think this could be used for unions as well
 
 typedef struct {
-	CType *returnType;
+	CTypeFull *returnType;
 	size_t argCount;
-	CType **arg;
+	CTypeFull **arg;
 } CFunction;
