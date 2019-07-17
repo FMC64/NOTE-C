@@ -389,7 +389,7 @@ void memcheck_recap(void)
 	return;
 }
 
-void memcheck_stats(void)
+static void memcheck_stats_actual(void)
 {
 	size_t i;
 	size_t block_count = VecMemcheckBlock_block_count(blocks);
@@ -400,10 +400,14 @@ void memcheck_stats(void)
 	#else
 	size_t memcheck_overhead = MemcheckBlockNode_node_count(blocks.node) * (sizeof(MemcheckBlockNode) + 4) + block_count * (sizeof(MemcheckBlock) + 4);
 	#endif // MEMCHECK_LIGHT
-	terminal_flush();
 
 	printf("%u blocks\n%u bytes allocated\noverhead: %u bytes\nmemcheck overhead: %u bytes\n\nTOTAL: %u bytes\n",
 	block_count, total, overhead, memcheck_overhead, total + overhead + memcheck_overhead);
+}
 
+void memcheck_stats(void)
+{
+	terminal_flush();
+	memcheck_stats_actual();
 	terminal_show();
 }
