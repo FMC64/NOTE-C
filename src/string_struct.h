@@ -22,10 +22,11 @@ typedef struct {
 struct StrSonicNode {
 	VecStrSonicNode sub;
 	char *key;
+	unsigned char type;
 	void *value;
 };
 
 typedef struct {
 	StrSonicNode node;
-	void (*elem_destroy_cb)(void*);
+	void (*elem_destroy_cb)(unsigned char, void*);
 } StrSonic;

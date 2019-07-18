@@ -30,13 +30,13 @@ static void strsonic_test(void)
 {
 	StrSonic sonic = StrSonic_init(NULL);
 
-	StrSonic_add(&sonic, "ab", NULL);
-	StrSonic_add(&sonic, "cd", NULL);
-	StrSonic_add(&sonic, "ae", NULL);
-	StrSonic_add(&sonic, "str", NULL);
-	StrSonic_add(&sonic, "string", NULL);
-	StrSonic_add(&sonic, "string_test", (void*)6);
-	StrSonic_add(&sonic, "string_lol", NULL);
+	StrSonic_add(&sonic, "ab", 0, NULL);
+	StrSonic_add(&sonic, "cd", 0, NULL);
+	StrSonic_add(&sonic, "ae", 0, NULL);
+	StrSonic_add(&sonic, "str", 0, NULL);
+	StrSonic_add(&sonic, "string", 0, NULL);
+	StrSonic_add(&sonic, "string_test", 0, (void*)6);
+	StrSonic_add(&sonic, "string_lol", 0, NULL);
 	StrSonic_print(sonic);
 	memcheck_stats();
 	StrSonic_destroy(&sonic);

@@ -101,28 +101,29 @@ int CScope_removeBlock(CScope *scope, CContext ctx)
 	return 1;
 }
 
-int CScope_addSymbol(CScope *scope, const char *key, CSymbol *to_add, CContext ctx)
+int CScope_addSymbol(CScope *scope, const char *key, CSymbol to_add, CContext ctx)
 {
 	if (CScope_isVoid(scope, ctx))
 		return 0;
-	if (!StrSonic_add(&CScope_lastBlock(scope)->symbols, key, to_add)) {
+	if (!StrSonic_add(&CScope_lastBlock(scope)->symbols, key, to_add.type, to_add.data)) {
 		printf_error(ctx, "redefinition of symbol '%s'", key);
 		return 0;
 	}
 	return 1;
 }
 
-int CScope_resolve(CScope *scope, const char *key, void **pres)
+int CScope_resolve(CScope *scope, const char *key, CSymbol *pres)
 {
-	void *got;
+	unsigned char type;
+	void *data;
 	size_t i;
 	size_t i_rev;
 
 	for (i = 0; i < scope->count; i++) {
 		i_rev = scope->count - 1 - i;
-		got = StrSonic_resolve(&scope->block[i_rev].symbols, key);
-		if (got != NULL) {
-			*pres = got;
+		data = StrSonic_resolve(&scope->block[i_rev].symbols, key, &type);
+		if (data != NULL) {
+			*pres = CSymbol_init(type, data);
 			return 1;
 		}
 	}
@@ -144,7 +145,7 @@ CBlock CBlock_default(void)
 {
 	CBlock res;
 
-	res.symbols = StrSonic_init((void (*)(void*))CSymbol_destroy);
+	res.symbols = StrSonic_init(&StrSonic_CSymbol_destroy);
 	return res;
 }
 
@@ -153,28 +154,32 @@ void CBlock_destroy(CBlock block)
 	StrSonic_destroy(&block.symbols);
 }
 
-CSymbol* CSymbol_create(CSymbolType type, void *data)
+CSymbol CSymbol_init(CSymbolType type, void *data)
 {
-	CSymbol *res = (CSymbol*)malloc(sizeof(CSymbol));
+	CSymbol res;
 
-	res->type = type;
-	res->data = data;
+	res.type = type;
+	res.data = data;
 	return res;
 }
 
-void CSymbol_destroy(CSymbol *symbol)
+void CSymbol_destroy(CSymbol symbol)
 {
-	switch (symbol->type) {
+	switch (symbol.type) {
 	case CSYMBOL_KEYWORD:
-		CKeyword_destroy(symbol->data);
+		CKeyword_destroy(symbol.data);
 		break;
 	}
-	free(symbol);
 }
 
-CSymbol* CKeyword_create(CKeyword keyword)
+void StrSonic_CSymbol_destroy(unsigned char type, void *data)
 {
-	return CSymbol_create(CSYMBOL_KEYWORD, (void*)keyword);
+	CSymbol_destroy(CSymbol_init(type, data));
+}
+
+CSymbol CKeyword_create(CKeyword keyword)
+{
+	return CSymbol_init(CSYMBOL_KEYWORD, (void*)keyword);
 }
 
 static const struct {const char *key; CKeyword keyword;} str_keyword[] = {
@@ -258,8 +263,10 @@ int CParser_exec(CParser *parser)
 	if (!CBuf_readTokens(&parser->buf))
 		return 0;
 	tokens = StreamCToken_init(parser->buf.tokens);
+	memcheck_stats();
 	if (!populate_keywords(scope))
 		return 0;
+	memcheck_stats();
 	while (StreamCToken_at(&tokens, NULL)) {
 		if (CKeyword_poll(scope, &tokens, &keyword, NULL)) {
 			switch (keyword) {
@@ -292,15 +299,15 @@ void CParser_destroy(CParser parser)
 int CKeyword_poll(CScope *scope, StreamCToken *tokens, CKeyword *pres, CContext *ctx)
 {
 	CToken cur;
-	CSymbol *sym;
+	CSymbol sym;
 
 	if (!StreamCToken_at(tokens, &cur))
 		return 0;
-	if (!CScope_resolve(scope, cur.str, (void**)&sym))
+	if (!CScope_resolve(scope, cur.str, &sym))
 		return 0;
-	if (sym->type != CSYMBOL_KEYWORD)
+	if (sym.type != CSYMBOL_KEYWORD)
 		return 0;
-	*pres = (CKeyword)sym->data;
+	*pres = (CKeyword)sym.data;
 	if (ctx != NULL)
 		*ctx = cur.ctx;
 	StreamCToken_forward(tokens);

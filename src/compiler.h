@@ -39,17 +39,18 @@ int str_is_identifier(const char *str);
 CScope* CScope_create(void);
 void CScope_addBlock(CScope *scope, CBlock to_add);
 int CScope_removeBlock(CScope *scope, CContext ctx);
-int CScope_addSymbol(CScope *scope, const char *key, CSymbol *to_add, CContext ctx);
-int CScope_resolve(CScope *scope, const char *key, void **pres);
+int CScope_addSymbol(CScope *scope, const char *key, CSymbol to_add, CContext ctx);
+int CScope_resolve(CScope *scope, const char *key, CSymbol *pres);
 void CScope_destroy(CScope *scope);
 
 CBlock CBlock_default(void);
 void CBlock_destroy(CBlock block);
 
-CSymbol* CSymbol_create(CSymbolType type, void *data);
-void CSymbol_destroy(CSymbol *symbol);
+CSymbol CSymbol_init(CSymbolType type, void *data);
+void CSymbol_destroy(CSymbol symbol);
+void StrSonic_CSymbol_destroy(unsigned char type, void *data);
 
-CSymbol* CKeyword_create(CKeyword keyword);
+CSymbol CKeyword_create(CKeyword keyword);
 const char* CKeyword_str(CKeyword keyword);
 void CKeyword_destroy(void *data);
 
@@ -61,9 +62,6 @@ int CKeyword_poll(CScope *scope, StreamCToken *tokens, CKeyword *pres, CContext 
 
 
 void CCompiler(char *path);
-
-CSymbol* CKeyword_create(CKeyword keyword);
-void CKeyword_destroy(void *data);
 
 
 CPrimitive CPrimitive_default(void);
