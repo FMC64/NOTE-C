@@ -49,8 +49,22 @@ typedef struct {
 } CBlock;
 
 typedef struct {
+	struct CTypeFull *t_void;
+
+	size_t t_uint_count;
+	struct CTypeFull *t_uint[3];	// 1, 2, 4 bytes
+
+	size_t t_sint_count;
+	struct CTypeFull *t_sint[3];	// 1, 2, 4 bytes
+
+	size_t t_float_count;
+	struct CTypeFull *t_float[2];	// 4, 8 bytes
+} CTypeFullCached;
+
+typedef struct {
 	size_t count;
 	CBlock *block;
+	CTypeFullCached cachedTypes;
 } CScope;
 
 // CPP REFERENCE FTW
@@ -95,7 +109,7 @@ typedef enum {
 	CTYPE_NONE = 0,
 	CTYPE_CONST = 1,
 	CTYPE_VOLATILE = 2,
-} CTypeFullFlag;
+} CTypeFlag;
 
 typedef enum {
 	CPRIMITIVE_NONE,
@@ -109,8 +123,8 @@ typedef enum {
 
 typedef struct {
 	void *data;	// For int / float -> bytes count, struct -> ptr to CStruct, function -> CFunction
-	char type;	// CPrimitiveType
-	char isDataRef;
+	char type;      // CPrimitiveType
+	char isDataNamed;
 } CPrimitive;
 
 typedef struct {
@@ -124,8 +138,8 @@ typedef struct {
 	CArrayColumn *array;
 } CReference;
 
-typedef struct {
-	CTypeFullFlag flags;
+typedef struct CTypeFull {
+	CTypeFlag flags;
 	CReference ref;
 	CPrimitive primitive;
 } CTypeFull;
@@ -139,20 +153,28 @@ typedef enum {
 } CStorageType;
 
 typedef struct {
+	size_t flags : 2;	// CTypeFlag
+	size_t isTypeNamed : 1;
+	size_t referenceLevel : 29;
+	CTypeFull *full;
+} CType;
+
+typedef struct {
 	char *name;
 	size_t address;
 	CStorageType storage;
-	CTypeFull *type;
+	CType type;
 } CVariable;
 
 typedef struct {
-	size_t size;
+	int isDefined;
+	size_t size;	// Bytes
 	size_t variableCount;
 	CVariable *variable;
 } CStruct;	// I think this could be used for unions as well
 
 typedef struct {
-	CTypeFull *returnType;
+	CType returnType;
 	size_t argCount;
-	CTypeFull **arg;
+	CType *arg;
 } CFunction;

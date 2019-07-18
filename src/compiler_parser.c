@@ -1,12 +1,46 @@
 
 #include "headers.h"
 
+static CTypeFullCached CTypeFullCached_create(void)
+{
+	CTypeFullCached res;
+	size_t int_bytes[3] = {1, 2, 4};
+	size_t float_bytes[2] = {4, 8};
+	size_t i;
+
+	res.t_void = CTypeFull_createPrimitive(CPRIMITIVE_VOID, 0);
+	res.t_uint_count = 3;
+	res.t_sint_count = 3;
+	for (i = 0; i < 3; i++) {
+		res.t_uint[i] = CTypeFull_createPrimitive(CPRIMITIVE_UINT, int_bytes[i]);
+		res.t_sint[i] = CTypeFull_createPrimitive(CPRIMITIVE_SINT, int_bytes[i]);
+	}
+	res.t_float_count = 2;
+	for (i = 0; i < 2; i++)
+		res.t_float[i] = CTypeFull_createPrimitive(CPRIMITIVE_FLOAT, float_bytes[i]);
+	return res;
+}
+
+static void CTypeFullCached_destroy(CTypeFullCached cached)
+{
+	size_t i;
+
+	CTypeFull_destroy(cached.t_void);
+	for (i = 0; i < 3; i++) {
+		CTypeFull_destroy(cached.t_uint[i]);
+		CTypeFull_destroy(cached.t_sint[i]);
+	}
+	for (i = 0; i < 2; i++)
+		CTypeFull_destroy(cached.t_float[i]);
+}
+
 CScope* CScope_create(void)
 {
 	CScope *res = (CScope*)malloc(sizeof(CScope));
 
 	res->count = 0;
 	res->block = NULL;
+	res->cachedTypes = CTypeFullCached_create();
 	CScope_addBlock(res, CBlock_default());
 	return res;
 }
@@ -81,6 +115,7 @@ void CScope_destroy(CScope *scope)
 	for (i = 0; i < scope->count; i++)
 		CBlock_destroy(scope->block[i]);
 	free(scope->block);
+	CTypeFullCached_destroy(scope->cachedTypes);
 	free(scope);
 }
 
@@ -197,7 +232,7 @@ int CParser_exec(CParser *parser)
 	StreamCToken tokens;
 	CKeyword keyword;
 	char *name;
-	CTypeFull *type;
+	CType type;
 
 	if (!CBuf_readTokens(&parser->buf))
 		return 0;
@@ -208,13 +243,13 @@ int CParser_exec(CParser *parser)
 		if (CKeyword_poll(scope, &tokens, &keyword, NULL)) {
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
-				if (!CTypeFull_parse(scope, &tokens, &name, &type, NULL, NULL)) {
+				if (!CType_parse(scope, &tokens, &name, &type, NULL, NULL)) {
 					res = 0;
 					goto end_loop;
 				}
-				CTypeFull_print(type);
+				CType_print(type);
 				memcheck_stats();
-				CTypeFull_destroy(type);
+				CType_destroy(type);
 				memcheck_stats();
 				break;
 			}

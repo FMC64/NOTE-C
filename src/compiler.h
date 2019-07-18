@@ -70,10 +70,15 @@ CPrimitive CPrimitive_default(void);
 void CPrimitive_destroy(CPrimitive primitive);
 
 
-const char* CTypeFullFlag_str(CTypeFullFlag flag);
+const char* CTypeFlag_str(CTypeFlag flag);
 const char* CStorageType_str(CStorageType storage);
 
 void CPrimitive_destroy(CPrimitive primitive);
+
+CType CType_fromFull(CTypeFull *full);
+void CType_destroy(CType type);
+
+CTypeFull* CTypeFull_createPrimitive(CPrimitiveType type, size_t bits);
 
 void CFunction_destroy(CFunction *func);
 
@@ -81,6 +86,8 @@ int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres, VecSt
 void CVariable_destroy(CVariable *variable);
 
 int CTypeFull_parse(CScope *scope, StreamCToken *tokens, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName);
+int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName);
+void CType_shrink(CScope *scope, CType *to_shrink);
 CTypeFull* CTypeFull_alloc(CTypeFull base);
-void CTypeFull_print(CTypeFull *type);
+void CType_print(CType type);
 void CTypeFull_destroy(CTypeFull *type);
