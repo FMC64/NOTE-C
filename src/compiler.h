@@ -77,6 +77,8 @@ void CPrimitive_destroy(CPrimitive primitive);
 
 CType CType_fromFull(CTypeFull *full);
 CPrimitiveType CType_primitiveType(CType type);
+void* CType_primitiveData(CType type);
+size_t CType_referenceLevel(CType type);
 void CType_destroy(CType type);
 
 CTypeFull* CTypeFull_createPrimitive(CPrimitiveType type, size_t bits);
@@ -90,6 +92,11 @@ int CTypeFull_parse(CScope *scope, StreamCToken *tokens, char **pname, CTypeFull
 int CType_parseFull(CScope *scope, StreamCToken *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName);
 int CType_parse(CScope *scope, StreamCToken *tokens, CType *pres);
 void CType_shrink(CScope *scope, CType *to_shrink);
+
 CTypeFull* CTypeFull_alloc(CTypeFull base);
+void CType_print_tree(CType type);
 void CType_print(CType type);
 void CTypeFull_destroy(CTypeFull *type);
+
+char* CStruct_type(CStruct *str);
+char* CStruct_name(CStruct *str);

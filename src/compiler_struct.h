@@ -166,7 +166,9 @@ typedef struct {
 } CVariable;
 
 typedef struct {
-	int isDefined;
+	char *name;
+	char isDefined;
+	char isUnion;
 	size_t size;	// Bytes
 	size_t variableCount;
 	CVariable *variable;

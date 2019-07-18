@@ -269,9 +269,10 @@ int CParser_exec(CParser *parser)
 					goto end_loop;
 				}
 				CType_print(type);
-				memcheck_stats();
+				terminal_show();
+				//memcheck_stats();
 				CType_destroy(type);
-				memcheck_stats();
+				//memcheck_stats();
 				break;
 			}
 		} else

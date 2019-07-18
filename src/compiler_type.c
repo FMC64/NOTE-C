@@ -61,6 +61,16 @@ CPrimitiveType CType_primitiveType(CType type)
 	return type.full->primitive.type;
 }
 
+void* CType_primitiveData(CType type)
+{
+	return type.full->primitive.data;
+}
+
+size_t CType_referenceLevel(CType type)
+{
+	return type.referenceLevel + type.full->ref.level;
+}
+
 void CType_destroy(CType type)
 {
 	if (!type.isTypeNamed)
@@ -702,9 +712,9 @@ static void print_tabs(size_t count)
 		printf("  ");
 }
 
-static void CType_print_actual(CType type, size_t depth);
+static void CType_print_tree_actual(CType type, size_t depth);
 
-static void CVariable_print(CVariable *var, size_t depth)
+static void CVariable_print_tree(CVariable *var, size_t depth)
 {
 	print_tabs(depth);
 	printf("name: '%s'\n", var->name != NULL ? var->name : "(null)");
@@ -714,26 +724,26 @@ static void CVariable_print(CVariable *var, size_t depth)
 	printf("storage: %u\n", var->storage);
 	print_tabs(depth);
 	printf("type:\n");
-	CType_print_actual(var->type, depth + 1);
+	CType_print_tree_actual(var->type, depth + 1);
 }
 
-static void CFunction_print(CFunction *func, size_t depth)
+static void CFunction_print_tree(CFunction *func, size_t depth)
 {
 	size_t i;
 
 	print_tabs(depth);
 	printf("return:\n");
-	CType_print_actual(func->returnType, depth + 1);
+	CType_print_tree_actual(func->returnType, depth + 1);
 	print_tabs(depth);
 	printf("%u args:\n", func->argCount);
 	for (i = 0; i < func->argCount; i++) {
 		print_tabs(depth);
 		printf("arg #%u:\n", i);
-		CType_print_actual(func->arg[i], depth + 1);
+		CType_print_tree_actual(func->arg[i], depth + 1);
 	}
 }
 
-static void CTypeFull_print(CTypeFull *type, size_t depth)
+static void CTypeFull_print_tree(CTypeFull *type, size_t depth)
 {
 	size_t i;
 
@@ -767,13 +777,13 @@ static void CTypeFull_print(CTypeFull *type, size_t depth)
 		break;
 	case CPRIMITIVE_FUNCTION:
 		printf("function:\n", type->primitive.data);
-		CFunction_print(type->primitive.data, depth + 1);
+		CFunction_print_tree(type->primitive.data, depth + 1);
 		break;
 	}
 	printf("\n");
 }
 
-static void CType_print_actual(CType type, size_t depth)
+static void CType_print_tree_actual(CType type, size_t depth)
 {
 	print_tabs(depth);
 	printf("flags: %u\n", type.flags);
@@ -781,14 +791,109 @@ static void CType_print_actual(CType type, size_t depth)
 	printf("isTypeNamed: %u\n", type.isTypeNamed);
 	print_tabs(depth);
 	printf("refLevel: %u\n", type.referenceLevel);
-	CTypeFull_print(type.full, depth + 1);
+	CTypeFull_print_tree(type.full, depth + 1);
+}
+
+void CType_print_tree(CType type)
+{
+	terminal_flush();
+	CType_print_tree_actual(type, 0);
+	terminal_show();
+}
+
+static void CTypeFlags_print(CTypeFlag flags)
+{
+	size_t i;
+	CTypeFlag cur;
+
+	for (i = 0; i < sizeof(flags) * 8; i++) {
+		cur = 1 << i;
+		if (flags & cur)
+			printf("%s ", CTypeFlag_str(cur));
+	}
+}
+
+static void print_primitive_num(CPrimitiveType type, size_t bytes)
+{
+	if (type == CPRIMITIVE_VOID)
+		printf("void");
+	if (type == CPRIMITIVE_UINT)
+		printf("unsigned ");
+	else if (type == CPRIMITIVE_UINT)
+		printf("signed ");
+	if ((type == CPRIMITIVE_UINT) || (type == CPRIMITIVE_SINT))
+		switch (bytes) {
+		case 1:
+			printf("char");
+			break;
+		case 2:
+			printf("short");
+			break;
+		case 4:
+			printf("int");
+			break;
+		case 8:
+			printf("long long");
+			break;
+		}
+	if (type == CPRIMITIVE_FLOAT)
+		switch (bytes) {
+		case 4:
+			printf("float");
+			break;
+		case 8:
+			printf("double");
+			break;
+		}
+}
+
+static void print_reference(CType type)
+{
+	size_t level = CType_referenceLevel(type);
+	size_t i;
+
+	for (i = 0; i < level; i++)
+		printf("*");
+	for (i = 0; i < type.full->ref.arrayCount; i++) {
+		printf("[");
+		if (!type.full->ref.array[i].isUndef)
+			printf("%u", type.full->ref.array[i].size);
+		printf("]");
+	}
+}
+
+static void print_function(CFunction *func, CType base)
+{
+	size_t i;
+
+	CType_print(func->returnType);
+	printf(" (");
+	print_reference(base);
+	printf(")(");
+	for (i = 0; i < func->argCount; i++) {
+		CType_print(func->arg[i]);
+		if (i < (func->argCount - 1))
+			printf(", ");
+	}
+	printf(")");
 }
 
 void CType_print(CType type)
 {
-	terminal_flush();
-	CType_print_actual(type, 0);
-	terminal_show();
+	CTypeFlags_print(type.flags);
+	switch (CType_primitiveType(type)) {
+	case CPRIMITIVE_FUNCTION:
+		print_function(CType_primitiveData(type), type);
+		break;
+	case CPRIMIVITE_STRUCT:
+		printf("%s %s", CStruct_type(CType_primitiveData(type)), CStruct_name(CType_primitiveData(type)));
+		print_reference(type);
+		break;
+	default:
+		print_primitive_num(CType_primitiveType(type), (size_t)CType_primitiveData(type));
+		print_reference(type);
+		break;
+	}
 }
 
 void CTypeFull_destroy(CTypeFull *type)
@@ -798,4 +903,20 @@ void CTypeFull_destroy(CTypeFull *type)
 	CReference_destroy(type->ref);
 	CPrimitive_destroy(type->primitive);
 	free(type);
+}
+
+char* CStruct_type(CStruct *str)
+{
+	if (str->isUnion)
+		return "union";
+	else
+		return "struct";
+}
+
+char* CStruct_name(CStruct *str)
+{
+	if (str->name != NULL)
+		return str->name;
+	else
+		return "{unnamed}";
 }
