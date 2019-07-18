@@ -49,16 +49,15 @@ typedef struct {
 } CBlock;
 
 typedef struct {
+	size_t count;
+	struct CTypeFull **type;
+} VecCTypeFull;
+
+typedef struct {
 	struct CTypeFull *t_void;
-
-	size_t t_uint_count;
-	struct CTypeFull *t_uint[3];	// 1, 2, 4 bytes
-
-	size_t t_sint_count;
-	struct CTypeFull *t_sint[3];	// 1, 2, 4 bytes
-
-	size_t t_float_count;
-	struct CTypeFull *t_float[2];	// 4, 8 bytes
+	VecCTypeFull t_uint;
+	VecCTypeFull t_sint;
+	VecCTypeFull t_float;
 } CTypeFullCached;
 
 typedef struct {

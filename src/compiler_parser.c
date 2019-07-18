@@ -1,6 +1,32 @@
 
 #include "headers.h"
 
+static VecCTypeFull VecCTypeFull_init(void)
+{
+	VecCTypeFull res;
+
+	res.count = 0;
+	res.type = NULL;
+	return res;
+}
+
+static void VecCTypeFull_add(VecCTypeFull *vec, CTypeFull *to_add)
+{
+	size_t cur = vec->count++;
+
+	vec->type = (CTypeFull**)realloc(vec->type, vec->count * sizeof(CTypeFull*));
+	vec->type[cur] = to_add;
+}
+
+static void VecCTypeFull_destroy(VecCTypeFull vec)
+{
+	size_t i;
+
+	for (i = 0; i < vec.count; i++)
+		CTypeFull_destroy(vec.type[i]);
+	free(vec.type);
+}
+
 static CTypeFullCached CTypeFullCached_create(void)
 {
 	CTypeFullCached res;
@@ -9,29 +35,24 @@ static CTypeFullCached CTypeFullCached_create(void)
 	size_t i;
 
 	res.t_void = CTypeFull_createPrimitive(CPRIMITIVE_VOID, 0);
-	res.t_uint_count = 3;
-	res.t_sint_count = 3;
+	res.t_uint = VecCTypeFull_init();
+	res.t_sint = VecCTypeFull_init();
 	for (i = 0; i < 3; i++) {
-		res.t_uint[i] = CTypeFull_createPrimitive(CPRIMITIVE_UINT, int_bytes[i]);
-		res.t_sint[i] = CTypeFull_createPrimitive(CPRIMITIVE_SINT, int_bytes[i]);
+		VecCTypeFull_add(&res.t_uint, CTypeFull_createPrimitive(CPRIMITIVE_UINT, int_bytes[i]));
+		VecCTypeFull_add(&res.t_sint, CTypeFull_createPrimitive(CPRIMITIVE_SINT, int_bytes[i]));
 	}
-	res.t_float_count = 2;
+	res.t_float = VecCTypeFull_init();
 	for (i = 0; i < 2; i++)
-		res.t_float[i] = CTypeFull_createPrimitive(CPRIMITIVE_FLOAT, float_bytes[i]);
+		VecCTypeFull_add(&res.t_float, CTypeFull_createPrimitive(CPRIMITIVE_FLOAT, float_bytes[i]));
 	return res;
 }
 
 static void CTypeFullCached_destroy(CTypeFullCached cached)
 {
-	size_t i;
-
 	CTypeFull_destroy(cached.t_void);
-	for (i = 0; i < 3; i++) {
-		CTypeFull_destroy(cached.t_uint[i]);
-		CTypeFull_destroy(cached.t_sint[i]);
-	}
-	for (i = 0; i < 2; i++)
-		CTypeFull_destroy(cached.t_float[i]);
+	VecCTypeFull_destroy(cached.t_uint);
+	VecCTypeFull_destroy(cached.t_sint);
+	VecCTypeFull_destroy(cached.t_float);
 }
 
 CScope* CScope_create(void)
@@ -243,7 +264,7 @@ int CParser_exec(CParser *parser)
 		if (CKeyword_poll(scope, &tokens, &keyword, NULL)) {
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
-				if (!CType_parse(scope, &tokens, &name, &type, NULL, NULL)) {
+				if (!CType_parseFull(scope, &tokens, &name, &type, NULL, NULL)) {
 					res = 0;
 					goto end_loop;
 				}

@@ -56,6 +56,11 @@ CType CType_fromFull(CTypeFull *full)
 	return res;
 }
 
+CPrimitiveType CType_primitiveType(CType type)
+{
+	return type.full->primitive.type;
+}
+
 void CType_destroy(CType type)
 {
 	if (!type.isTypeNamed)
@@ -511,13 +516,15 @@ static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CTy
 			return 0;
 		}
 	while ((!StreamCToken_pollRpar(tokens, &ctx)) || forceContinue) {
-		if (!CType_parse(scope, tokens, &name, &type, NULL, NULL)) {
+		if (!CType_parseFull(scope, tokens, &name, &type, NULL, NULL)) {
 			VecStr_destroy(args);
 			return 0;
 		}
-		CFunction_addArg(pres->primitive.data, type);
-		VecStr_add(&args, name != NULL ? strdup(name) : name);
-		forceContinue = StreamCToken_pollStr(tokens, ",", NULL);
+		if (CType_primitiveType(type) != CPRIMITIVE_VOID) {
+			CFunction_addArg(pres->primitive.data, type);
+			VecStr_add(&args, name != NULL ? strdup(name) : name);
+			forceContinue = StreamCToken_pollStr(tokens, ",", NULL);
+		}
 	}
 	if (pargsName != NULL)
 		*pargsName = args;
@@ -617,13 +624,13 @@ int CTypeFull_parse(CScope *scope, StreamCToken *tokens, char **pname, CTypeFull
 	return 0;
 }
 
-static int search_primitive_type_full(size_t count, CTypeFull **type, size_t bits, CTypeFull **pres)
+static int VecCTypeFull_searchPrimitive(VecCTypeFull *vec, size_t bits, CTypeFull **pres)
 {
 	size_t i;
 
-	for (i = 0; i < count; i++)
-		if ((size_t)type[i]->primitive.data == bits) {
-			*pres = type[i];
+	for (i = 0; i < vec->count; i++)
+		if ((size_t)vec->type[i]->primitive.data == bits) {
+			*pres = vec->type[i];
 			return 1;
 		}
 	return 0;
@@ -652,24 +659,24 @@ void CType_shrink(CScope *scope, CType *to_shrink)
 		finish_shrink(full, (CTypeFull*)scope->cachedTypes.t_void, to_shrink);
 		return;
 	case CPRIMITIVE_UINT:
-		if (!search_primitive_type_full(scope->cachedTypes.t_uint_count, scope->cachedTypes.t_uint, (size_t)full->primitive.data, &found))
+		if (!VecCTypeFull_searchPrimitive(&scope->cachedTypes.t_uint, (size_t)full->primitive.data, &found))
 			return;
 		finish_shrink(full, found, to_shrink);
 		return;
 	case CPRIMITIVE_SINT:
-		if (!search_primitive_type_full(scope->cachedTypes.t_sint_count, scope->cachedTypes.t_sint, (size_t)full->primitive.data, &found))
+		if (!VecCTypeFull_searchPrimitive(&scope->cachedTypes.t_sint, (size_t)full->primitive.data, &found))
 			return;
 		finish_shrink(full, found, to_shrink);
 		return;
 	case CPRIMITIVE_FLOAT:
-		if (!search_primitive_type_full(scope->cachedTypes.t_float_count, scope->cachedTypes.t_float, (size_t)full->primitive.data, &found))
+		if (!VecCTypeFull_searchPrimitive(&scope->cachedTypes.t_float, (size_t)full->primitive.data, &found))
 			return;
 		finish_shrink(full, found, to_shrink);
 		return;
 	}
 }
 
-int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName)
+int CType_parseFull(CScope *scope, StreamCToken *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName)
 {
 	CType res = CType_default();
 
@@ -678,6 +685,13 @@ int CType_parse(CScope *scope, StreamCToken *tokens, char **pname, CType *pres, 
 	CType_shrink(scope, &res);
 	*pres = res;
 	return 1;
+}
+
+int CType_parse(CScope *scope, StreamCToken *tokens, CType *pres)
+{
+	char *name;
+
+	return CType_parseFull(scope, tokens, &name, pres, NULL, NULL);
 }
 
 static void print_tabs(size_t count)
@@ -710,6 +724,8 @@ static void CFunction_print(CFunction *func, size_t depth)
 	print_tabs(depth);
 	printf("return:\n");
 	CType_print_actual(func->returnType, depth + 1);
+	print_tabs(depth);
+	printf("%u args:\n", func->argCount);
 	for (i = 0; i < func->argCount; i++) {
 		print_tabs(depth);
 		printf("arg #%u:\n", i);
