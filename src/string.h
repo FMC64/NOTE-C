@@ -28,7 +28,7 @@ int VecStr_poll(VecStr vec, size_t *i, char **pres);
 void VecStr_destroy(VecStr vec);
 
 StrSonic StrSonic_init(void (*elem_destroy_cb)(unsigned char, void*));
-int StrSonic_add(StrSonic *sonic, const char *key, unsigned char type, void *value);
+int StrSonic_add(StrSonic *sonic, const char *key, unsigned char type, void *data);
 void StrSonic_print(StrSonic sonic);
 void* StrSonic_resolve(StrSonic *sonic, const char *key, unsigned char *type);
 void StrSonic_destroy_elem(StrSonic *sonic, const char *key);
