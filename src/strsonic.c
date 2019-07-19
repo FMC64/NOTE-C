@@ -1,28 +1,6 @@
 
 #include "headers.h"
 
-/*static VecStrSonicNode VecStrSonicNode_init(void)
-{
-	VecStrSonicNode res;
-
-	res.count = 0;
-	res.node = NULL;
-	return res;
-}
-
-static void VecStrSonicNode_add(VecStrSonicNode *vec, StrSonicNode to_add)
-{
-	size_t cur = vec->count++;
-
-	vec->node = (StrSonicNode*)realloc(vec->node, vec->count * sizeof(StrSonicNode));
-	vec->node[cur] = to_add;
-}
-
-static void VecStrSonicNode_destroy(VecStrSonicNode vec)
-{
-	free(vec.node);
-}*/
-
 #define NODE_TYPE_SUBCOUNTZERO 0x80
 #define NODE_TYPE_NODATA 0x40
 

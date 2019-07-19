@@ -12,13 +12,6 @@ typedef struct {
 	char **str;
 } VecStr;
 
-/*typedef struct StrSonicNode StrSonicNode;
-
-typedef struct {
-	size_t count;
-	StrSonicNode *node;
-} VecStrSonicNode;*/
-
 typedef struct {
 	void *root;
 	void (*elem_destroy_cb)(unsigned char, void*);

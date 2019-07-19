@@ -263,11 +263,8 @@ int CParser_exec(CParser *parser)
 	if (!CBuf_readTokens(&parser->buf))
 		return 0;
 	tokens = StreamCToken_init(parser->buf.tokens);
-	memcheck_stats();
 	if (!populate_keywords(scope))
 		return 0;
-	memcheck_stats();
-	//StrSonic_print(scope->block[0].symbols);
 	while (StreamCToken_at(&tokens, NULL)) {
 		if (CKeyword_poll(scope, &tokens, &keyword, NULL)) {
 			switch (keyword) {

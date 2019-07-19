@@ -6,5 +6,5 @@
 #define CLAMP(value, min, max) (MAX(MIN((value), (max)), (min)))
 
 #define ptr_add(a, b) ((void*)&(((char*)(a))[(size_t)(b)]))
-#define cpy(dst, src) (memcpy(&dst, &src, sizeof(src)))
-#define cpy_ptr(dst, src) (memcpy(dst, src, sizeof(*src)))
+#define cpy(dst, src) (memcpy(&(dst), &(src), sizeof(src)))
+#define cpy_ptr(dst, src) (memcpy((dst), (src), sizeof(*src)))
