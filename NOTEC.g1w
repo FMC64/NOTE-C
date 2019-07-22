@@ -27,3 +27,4 @@ SourceFile=:src\malloc_unified.c
 SourceFile=:src\strsonic.c
 SourceFile=:src\compiler_parser.c
 SourceFile=:src\compiler_type.c
+SourceFile=:src\compiler_literal.c

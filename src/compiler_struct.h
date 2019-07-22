@@ -19,9 +19,37 @@ typedef struct {
 } VecCToken;
 
 typedef struct {
+	size_t i;
+	int is_comment;
+	int is_comment_single_line;
+	int is_quote;
+	char quote_char;
+	size_t quote_start;
+	CContext quote_start_ctx;
+	size_t line;
+	size_t line_start;
+} CTokenParserState;
+
+#define STREAMCTOKEN_BUFSIZE 512
+
+typedef struct {
+	const char *filename;
+	int filehandle;
+	char *buf;	// malloc'd to reduce vector size
+	CTokenParserState parserState;
+} StreamCToken;
+
+typedef struct {
+	size_t size;
+	StreamCToken *stream;
+} VecStreamCToken;
+
+typedef struct {
 	VecCToken vec;
 	size_t i;
-} StreamCToken;
+	VecStreamCToken streams;
+	VecStreamCToken terminatedStreams;	// flushed on each token polling pass
+} CStream;
 
 typedef struct {
 	char *input_file_path;

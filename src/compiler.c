@@ -255,7 +255,20 @@ int get_escaped_string(Str str, char **pres, CContext ctx)
 	return 1;
 }
 
-static int read_tokens(CBuf *buf, char *str)
+static CTokenParserState CTokenParserState_init(void)
+{
+	CTokenParserState res;
+
+	res.i = 0;
+	res.is_comment = 0;
+	res.is_comment_single_line = 0;
+	res.is_quote = 0;
+	res.line = 0;
+	res.line_start = 0;
+	return res;
+}
+
+static int StreamCToken_readTokens(StreamCToken *stream, VecCToken *dst)
 {
 	char *sep[] = {" ", "\t", "\n", NULL};
 	char *op[] = {"->", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^|", "|=",
@@ -263,99 +276,91 @@ static int read_tokens(CBuf *buf, char *str)
 	"<", ">", "=", "!", "&", "^", "|", "~",
 	"+", "-", "*", "/", "%" ,
 	"(", ")", "[", "]", "{", "}", "?", ":", ";", ",", "#", NULL};
-	size_t i = 0;
-	int is_comment = 0;
-	int is_comment_single_line = 0;
-	int is_quote = 0;
-	char quote_char;
-	size_t quote_start;
-	CContext quote_start_ctx;
-	size_t line = 0;
-	size_t line_start = 0;
+	CTokenParserState *s = &stream->parserState;
 	CContext ctx;
 	char *found;
 
-	while (str[i] != 0) {
-		ctx = CContext_init(buf->input_file_path, line + 1, i - line_start + 1);
-		if (str[i] == '\n') {
-			line++;
-			line_start = i + 1;
-			is_comment_single_line = 0;
+	while (1) {
+		ctx = CContext_init(stream->filename, s->line + 1, s->i - s->line_start + 1);
+		if (stream->buf[s->i] == '\n') {
+			s->line++;
+			s->line_start = s->i + 1;
+			s->is_comment_single_line = 0;
 		}
-		if (is_comment_single_line) {
-			i++;
+		if (s->is_comment_single_line) {
+			s->i++;
 			continue;
 		}
-		if (is_comment) {
-			if (streq_part(&str[i], "*/")) {
-				is_comment = 0;
-				i += 2;
+		if (s->is_comment) {
+			if (streq_part(&stream->buf[s->i], "*/")) {
+				s->is_comment = 0;
+				s->i += 2;
 				continue;
 			}
-			i++;
+			s->i++;
 			continue;
 		}
-		if ((str[i] == '"') || (str[i] == '\'')) {
-			if (!is_quote)
-				quote_char = str[i];
-			if ((!is_quote) || (str[i] == quote_char)) {
-				if (is_quote) {
-					i++;
-					if (!get_escaped_string(Str_init(i - quote_start, &str[quote_start]), &found, ctx))
+		if ((stream->buf[s->i] == '"') || (stream->buf[s->i] == '\'')) {
+			if (!s->is_quote)
+				s->quote_char = stream->buf[i];
+			if ((!s->is_quote) || (stream->buf[s->i] == s->quote_char)) {
+				if (s->is_quote) {
+					s->i++;
+					if (!get_escaped_string(Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]), &found, ctx))
 						return 0;
-					VecCToken_add(&buf->tokens, CToken_init(CTOKEN_IDENTIFIER, found, ctx));
+					VecCToken_add(dst, CToken_init(CTOKEN_IDENTIFIER, found, ctx));
 				} else {
-					quote_start = i;
-					quote_start_ctx = ctx;
+					s->quote_start = s->i;
+					s->quote_start_ctx = ctx;
 				}
-				is_quote = !is_quote;
-				if (!is_quote)
+				s->is_quote = !s->is_quote;
+				if (!s->is_quote)
 					continue;
 			}
 		}
-		if (is_quote) {
-			i++;
+		if (s->is_quote) {
+			s->i++;
 			continue;
 		}
-		if (streq_part(&str[i], "//")) {
-			is_comment_single_line = 1;
-			i += 2;
+		if (streq_part(&stream->buf[s->i], "//")) {
+			s->is_comment_single_line = 1;
+			s->i += 2;
 			continue;
 		}
-		if (streq_part(&str[i], "/*")) {
-			is_comment = 1;
-			i += 2;
+		if (streq_part(&stream->buf[s->i], "/*")) {
+			s->is_comment = 1;
+			s->i += 2;
 			continue;
 		}
-		if (streq_part_in_arr(&str[i], sep, &found)) {
-			i += strlen(found);
+		if (streq_part_in_arr(&stream->buf[s->i], sep, &found)) {
+			s->i += strlen(found);
 			continue;
 		}
-		if (streq_part_in_arr(&str[i], op, &found)) {
-			VecCToken_add(&buf->tokens,
+		if (streq_part_in_arr(&stream->buf[s->i], op, &found)) {
+			VecCToken_add(dst,
 			CToken_init(CTOKEN_OPERATOR, string_create_from_Str(Str_init_from_string(found)), ctx));
-			i += strlen(found);
+			s->i += strlen(found);
 			continue;
 		}
-		found = get_identifier(str, &i);
+		found = get_identifier(stream->buf, &s->i);
 		if (strlen(found) == 0) {
 			free(found);
 			terminal_flush();
 
 			CContext_print(ctx);
-			printf("Unknown character: '%c'\n", str[i]);
+			printf("Unknown character: '%c'\n", stream->buf[s->i]);
 
 			terminal_show();
 			return 0;
 		}
-		VecCToken_add(&buf->tokens, CToken_init(CTOKEN_IDENTIFIER, found, ctx));
+		VecCToken_add(dst, CToken_init(CTOKEN_IDENTIFIER, found, ctx));
 	}
-	if (is_quote) {
+	if (s->is_quote) {
 		terminal_flush();
 
 		printf("Unfinished string started at:\n");
-		CContext_print(quote_start_ctx);
-		printf("with character: %c\n", quote_char);
+		CContext_print(s->quote_start_ctx);
+		printf("with character: %c\n", s->quote_char);
 
 		terminal_show();
 		return 0;

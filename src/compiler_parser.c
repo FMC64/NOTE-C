@@ -265,6 +265,8 @@ int CParser_exec(CParser *parser)
 	tokens = StreamCToken_init(parser->buf.tokens);
 	if (!populate_keywords(scope))
 		return 0;
+	printf("size: %u\n", sizeof(double));
+	terminal_show();
 	while (StreamCToken_at(&tokens, NULL)) {
 		if (CKeyword_poll(scope, &tokens, &keyword, NULL)) {
 			switch (keyword) {
