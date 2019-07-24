@@ -163,7 +163,7 @@ static int get_storage(CKeyword keyword, CStorageType *storage)
 	return 0;
 }
 
-static int poll_attributes(CScope *scope, StreamCToken *tokens, CTypeFlag *flags, CStorageType *pstorage)
+static int poll_attributes(CScope *scope, CStream *tokens, CTypeFlag *flags, CStorageType *pstorage)
 {
 	CKeyword keyword;
 	CTypeFlag flag;
@@ -194,7 +194,7 @@ static int poll_attributes(CScope *scope, StreamCToken *tokens, CTypeFlag *flags
 			}
 			*pstorage = storage;
 		} else {
-			StreamCToken_back(tokens);
+			CStream_back(tokens);
 			break;
 		}
 	}
@@ -366,7 +366,7 @@ static CPrimitiveType get_int_primitive_type(CPrimitiveFlag flags)
 		return CPRIMITIVE_SINT;
 }
 
-static int poll_primitive(CScope *scope, StreamCToken *tokens, CPrimitive *pres)
+static int poll_primitive(CScope *scope, CStream *tokens, CPrimitive *pres)
 {
 	CKeyword keyword;
 	CPrimitiveFlag flags = 0;
@@ -389,7 +389,7 @@ static int poll_primitive(CScope *scope, StreamCToken *tokens, CPrimitive *pres)
 			if (!are_flags_coherent(flags, longCount, ctx))
 				return 0;
 		} else {
-			StreamCToken_back(tokens);
+			CStream_back(tokens);
 			break;
 		}
 	}
@@ -426,29 +426,29 @@ static int poll_primitive(CScope *scope, StreamCToken *tokens, CPrimitive *pres)
 		pres->data = (void*)4;
 		return 1;
 	} else {
-		printf_error_part(StreamCToken_atCtx(tokens), "unsupported type '");
+		printf_error_part(CStream_atCtx(tokens), "unsupported type '");
 		print_primitive(flags, longCount);
 		printf("'\n\n");
 		return 0;
 	}
 }
 
-static size_t poll_reference_level(StreamCToken *tokens)
+static size_t poll_reference_level(CStream *tokens)
 {
 	CToken cur;
 	size_t res = 0;
 
-	while (StreamCToken_at(tokens, &cur)) {
+	while (CStream_at(tokens, &cur)) {
 		if (streq(cur.str, "*")) {
 			res++;
-			StreamCToken_forward(tokens);
+			CStream_forward(tokens);
 		} else
 			break;
 	}
 	return res;
 }
 
-static int poll_reference(StreamCToken *tokens, char **pname, CReference *acc)
+static int poll_reference(CStream *tokens, char **pname, CReference *acc)
 {
 	CToken cur;
 	char *err_msg = "expected name for declaration";
@@ -457,15 +457,15 @@ static int poll_reference(StreamCToken *tokens, char **pname, CReference *acc)
 	if (pname != NULL)
 		*pname = NULL;
 	acc->level += poll_reference_level(tokens);
-	if (!StreamCToken_poll(tokens, &cur))
+	if (!CStream_poll(tokens, &cur))
 		return;
 	if (pname != NULL) {
 		if (str_is_identifier(cur.str))
 			*pname = cur.str;
 		else
-			StreamCToken_back(tokens);
+			CStream_back(tokens);
 	} else
-		StreamCToken_back(tokens);
+		CStream_back(tokens);
 	return 1;
 }
 
@@ -511,7 +511,7 @@ static CTypeFull* CTypeFull_initFunction(CScope *scope, CTypeFull *returnType, C
 	return CTypeFull_alloc(res);
 }
 
-static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CTypeFull *pres, VecStr *pargsName)
+static int poll_function(CScope *scope, CStream *tokens, int hasPolled, CTypeFull *pres, VecStr *pargsName)
 {
 	CType type;
 	VecStr args = VecStr_init();
@@ -521,11 +521,11 @@ static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CTy
 	char *name;
 
 	if (!hasPolled)
-		if (!StreamCToken_pollLpar(tokens, &ctx)) {
+		if (!CStream_pollLpar(tokens, &ctx)) {
 			printf_error(ctx, "missing '(' for declaring function arguments");
 			return 0;
 		}
-	while ((!StreamCToken_pollRpar(tokens, &ctx)) || forceContinue) {
+	while ((!CStream_pollRpar(tokens, &ctx)) || forceContinue) {
 		if (!CType_parseFull(scope, tokens, &name, &type, NULL, NULL)) {
 			VecStr_destroy(args);
 			return 0;
@@ -533,7 +533,7 @@ static int poll_function(CScope *scope, StreamCToken *tokens, int hasPolled, CTy
 		if (CType_primitiveType(type) != CPRIMITIVE_VOID) {
 			CFunction_addArg(pres->primitive.data, type);
 			VecStr_add(&args, name != NULL ? strdup(name) : name);
-			forceContinue = StreamCToken_pollStr(tokens, ",", NULL);
+			forceContinue = CStream_pollStr(tokens, ",", NULL);
 		}
 	}
 	if (pargsName != NULL)
@@ -562,7 +562,7 @@ static CVariable* CVariable_alloc(CVariable base)
 	return res;
 }
 
-int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres, VecStr *pargs)
+int CVariable_parse(CScope *scope, CStream *tokens, CVariable **pres, VecStr *pargs)
 {
 	CVariable *res = CVariable_alloc(CVariable_default());
 	char *name;
@@ -594,7 +594,7 @@ CTypeFull* CTypeFull_alloc(CTypeFull base)
 	return res;
 }
 
-int CTypeFull_parse(CScope *scope, StreamCToken *tokens, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName)
+int CTypeFull_parse(CScope *scope, CStream *tokens, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName)
 {
 	CTypeFull *res = CTypeFull_alloc(CTypeFull_default());
 	int isFun = 0;
@@ -609,15 +609,15 @@ int CTypeFull_parse(CScope *scope, StreamCToken *tokens, char **pname, CTypeFull
 		goto CTypeFull_parse_error;
 	if (!poll_reference(tokens, NULL, &res->ref))
 		goto CTypeFull_parse_error;
-	isFun = StreamCToken_pollLpar(tokens, NULL);
+	isFun = CStream_pollLpar(tokens, NULL);
 	if (!poll_reference(tokens, pname, &funRef))
 		goto CTypeFull_parse_error;
 	if (isFun)
-		if (!StreamCToken_pollRpar(tokens, &ctx)) {
+		if (!CStream_pollRpar(tokens, &ctx)) {
 			printf_error(ctx, "missing ')' for closing function name");
 			goto CTypeFull_parse_error;
 		}
-	hasPolled = StreamCToken_pollLpar(tokens, NULL);
+	hasPolled = CStream_pollLpar(tokens, NULL);
 	if (hasPolled || isFun) {
 		res = CTypeFull_initFunction(scope, res, funRef);
 		if (!poll_function(scope, tokens, hasPolled, res, pargsName))
@@ -686,7 +686,7 @@ void CType_shrink(CScope *scope, CType *to_shrink)
 	}
 }
 
-int CType_parseFull(CScope *scope, StreamCToken *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName)
+int CType_parseFull(CScope *scope, CStream *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName)
 {
 	CType res = CType_default();
 
@@ -697,7 +697,7 @@ int CType_parseFull(CScope *scope, StreamCToken *tokens, char **pname, CType *pr
 	return 1;
 }
 
-int CType_parse(CScope *scope, StreamCToken *tokens, CType *pres)
+int CType_parse(CScope *scope, CStream *tokens, CType *pres)
 {
 	char *name;
 

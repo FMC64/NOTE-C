@@ -20,6 +20,7 @@ typedef struct {
 
 typedef struct {
 	size_t i;
+	size_t i_file;
 	int is_comment;
 	int is_comment_single_line;
 	int is_quote;
@@ -33,8 +34,9 @@ typedef struct {
 #define STREAMCTOKEN_BUFSIZE 512
 
 typedef struct {
-	const char *filename;
+	const char *filepath;
 	int filehandle;
+	int isFileDone;
 	char *buf;	// malloc'd to reduce vector size
 	CTokenParserState parserState;
 } StreamCToken;
@@ -47,6 +49,7 @@ typedef struct {
 typedef struct {
 	VecCToken vec;
 	size_t i;
+	VecCToken buf;
 	VecStreamCToken streams;
 	VecStreamCToken terminatedStreams;	// flushed on each token polling pass
 } CStream;
@@ -89,8 +92,9 @@ typedef struct {
 } CTypeFullCached;
 
 typedef struct {
-	size_t count;
+	size_t blockCount;
 	CBlock *block;
+	CStream *stream;
 	CTypeFullCached cachedTypes;
 } CScope;
 

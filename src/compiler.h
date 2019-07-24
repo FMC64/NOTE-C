@@ -9,21 +9,40 @@ void VecCToken_add(VecCToken *vec, CToken to_add);
 void VecCToken_print(VecCToken vec);
 void VecCToken_print(VecCToken vec);
 int VecCToken_at(VecCToken vec, size_t i, CToken *pres);
+void VecCToken_flush(VecCToken *vec);
+void VecCToken_moveArea(VecCToken *src, size_t src_start, size_t src_size, VecCToken *dst);
+void VecCToken_merge(VecCToken *dst, VecCToken *to_append);
 void VecCToken_destroy(VecCToken vec);
 
-StreamCToken StreamCToken_init(VecCToken vec);
-void StreamCToken_begin(StreamCToken *stream);
-void StreamCToken_end(StreamCToken *stream);
-int StreamCToken_forward(StreamCToken *stream);
-int StreamCToken_back(StreamCToken *stream);
-int StreamCToken_at(StreamCToken *stream, CToken *pres);
-int StreamCToken_poll(StreamCToken *stream, CToken *pres);
-int StreamCToken_pollRev(StreamCToken *stream, CToken *pres);
-CContext StreamCToken_lastCtx(StreamCToken *stream);
-CContext StreamCToken_atCtx(StreamCToken *stream);
-int StreamCToken_pollStr(StreamCToken *tokens, const char *str, CContext *ctx);
-int StreamCToken_pollLpar(StreamCToken *tokens, CContext *ctx);
-int StreamCToken_pollRpar(StreamCToken *tokens, CContext *ctx);
+int StreamCToken_create(const char *filepath, StreamCToken *pres);
+int StreamCToken_pollFileBytes(StreamCToken *stream, size_t buf_start, size_t size);
+int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_eof);
+void StreamCToken_destroy(StreamCToken stream);
+
+VecStreamCToken VecStreamCToken_init(void);
+void VecStreamCToken_add(VecStreamCToken *vec, StreamCToken to_add);
+void VecStreamCToken_flush(VecStreamCToken *vec);
+void VecStreamCToken_move(VecStreamCToken *src, size_t src_ndx, VecStreamCToken *dst);
+void VecStreamCToken_moveArea(VecStreamCToken *src, size_t src_start, size_t src_size, VecStreamCToken *dst);
+void VecStreamCToken_destroy(VecStreamCToken vec);
+
+int CStream_create(const char *filepath, CStream **pres);
+void CStream_destroy(CStream *stream);
+int CStream_currentStream(CStream *stream, StreamCToken **pres);
+int CStream_nextBatch(CStream *stream);
+int CStream_isEof(CStream *stream);
+void CStream_begin(CStream *stream);
+void CStream_end(CStream *stream);
+int CStream_forward(CStream *stream);
+int CStream_back(CStream *stream);
+int CStream_at(CStream *stream, CToken *pres);
+int CStream_poll(CStream *stream, CToken *pres);
+int CStream_pollRev(CStream *stream, CToken *pres);
+CContext CStream_lastCtx(CStream *stream);
+CContext CStream_atCtx(CStream *stream);
+int CStream_pollStr(CStream *tokens, const char *str, CContext *ctx);
+int CStream_pollLpar(CStream *tokens, CContext *ctx);
+int CStream_pollRpar(CStream *tokens, CContext *ctx);
 
 CBuf CBuf_init(char *input_path);
 int CBuf_readTokens(CBuf *buf);
@@ -36,7 +55,7 @@ int char_is_identifier(char to_test);
 int str_is_identifier(const char *str);
 
 
-CScope* CScope_create(void);
+int CScope_create(const char *filepath, CScope **pres);
 void CScope_addBlock(CScope *scope, CBlock to_add);
 int CScope_removeBlock(CScope *scope, CContext ctx);
 int CScope_addSymbol(CScope *scope, const char *key, CSymbol to_add, CContext ctx);
@@ -55,13 +74,13 @@ const char* CKeyword_str(CKeyword keyword);
 void CKeyword_destroy(void *data);
 
 CParser CParser_init(char *source_path);
-int CParser_exec(CParser *parser);
+int CParser_exec(const char *path);
 void CParser_destroy(CParser parser);
 
-int CKeyword_poll(CScope *scope, StreamCToken *tokens, CKeyword *pres, CContext *ctx);
+int CKeyword_poll(CScope *scope, CStream *tokens, CKeyword *pres, CContext *ctx);
 
 
-void CCompiler(char *path);
+void CCompiler(const char *path);
 
 
 CPrimitive CPrimitive_default(void);
@@ -83,12 +102,12 @@ CTypeFull* CTypeFull_createPrimitive(CPrimitiveType type, size_t bits);
 
 void CFunction_destroy(CFunction *func);
 
-int CVariable_parse(CScope *scope, StreamCToken *tokens, CVariable **pres, VecStr *pargs);
+int CVariable_parse(CScope *scope, CStream *tokens, CVariable **pres, VecStr *pargs);
 void CVariable_destroy(CVariable *variable);
 
-int CTypeFull_parse(CScope *scope, StreamCToken *tokens, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName);
-int CType_parseFull(CScope *scope, StreamCToken *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName);
-int CType_parse(CScope *scope, StreamCToken *tokens, CType *pres);
+int CTypeFull_parse(CScope *scope, CStream *tokens, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName);
+int CType_parseFull(CScope *scope, CStream *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName);
+int CType_parse(CScope *scope, CStream *tokens, CType *pres);
 void CType_shrink(CScope *scope, CType *to_shrink);
 
 CTypeFull* CTypeFull_alloc(CTypeFull base);

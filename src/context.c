@@ -33,7 +33,7 @@ void CContext_print(CContext ctx)
 	printf("%s line %d(%d)\n", ctx.file, ctx.line, ctx.colon);
 }
 
-CContext CContext_polled(StreamCToken *stream)
+CContext CContext_polled(CStream *stream)
 {
 	size_t i = stream->i;
 

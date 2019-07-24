@@ -55,20 +55,25 @@ static void CTypeFullCached_destroy(CTypeFullCached cached)
 	VecCTypeFull_destroy(cached.t_float);
 }
 
-CScope* CScope_create(void)
+int CScope_create(const char *filepath, CScope **pres)
 {
 	CScope *res = (CScope*)malloc(sizeof(CScope));
 
-	res->count = 0;
+	if (!CStream_create(filepath, &res->stream)) {
+		free(res);
+		return 0;
+	}
+	res->blockCount = 0;
 	res->block = NULL;
 	res->cachedTypes = CTypeFullCached_create();
 	CScope_addBlock(res, CBlock_default());
-	return res;
+	*pres = res;
+	return 1;
 }
 
 static int CScope_isVoid(CScope *scope, CContext ctx)
 {
-	if (scope->count == 0) {
+	if (scope->blockCount == 0) {
 		printf_error(ctx, "noscope");
 		return 1;
 	}
@@ -78,14 +83,14 @@ static int CScope_isVoid(CScope *scope, CContext ctx)
 // Make sure scope is not empty before calling
 static CBlock* CScope_lastBlock(CScope *scope)
 {
-	return &scope->block[scope->count - 1];
+	return &scope->block[scope->blockCount - 1];
 }
 
 void CScope_addBlock(CScope *scope, CBlock to_add)
 {
-	size_t cur = scope->count++;
+	size_t cur = scope->blockCount++;
 
-	scope->block = (CBlock*)realloc(scope->block, scope->count * sizeof(CBlock));
+	scope->block = (CBlock*)realloc(scope->block, scope->blockCount * sizeof(CBlock));
 	scope->block[cur] = to_add;
 }
 
@@ -93,8 +98,8 @@ int CScope_removeBlock(CScope *scope, CContext ctx)
 {
 	if (CScope_isVoid(scope, ctx))
 		return 0;
-	CBlock_destroy(scope->block[--scope->count]);
-	if (scope->count == 0) {
+	CBlock_destroy(scope->block[--scope->blockCount]);
+	if (scope->blockCount == 0) {
 		printf_error(ctx, "you just destroyed file scope. congratulations.");
 		return 0;
 	}
@@ -119,8 +124,8 @@ int CScope_resolve(CScope *scope, const char *key, CSymbol *pres)
 	size_t i;
 	size_t i_rev;
 
-	for (i = 0; i < scope->count; i++) {
-		i_rev = scope->count - 1 - i;
+	for (i = 0; i < scope->blockCount; i++) {
+		i_rev = scope->blockCount - 1 - i;
 		data = StrSonic_resolve(&scope->block[i_rev].symbols, key, &type);
 		if (data != NULL) {
 			*pres = CSymbol_init(type, data);
@@ -134,10 +139,11 @@ void CScope_destroy(CScope *scope)
 {
 	size_t i;
 
-	for (i = 0; i < scope->count; i++)
+	for (i = 0; i < scope->blockCount; i++)
 		CBlock_destroy(scope->block[i]);
 	free(scope->block);
 	CTypeFullCached_destroy(scope->cachedTypes);
+	CStream_destroy(scope->stream);
 	free(scope);
 }
 
@@ -251,27 +257,25 @@ CParser CParser_init(char *source_path)
 	return res;
 }
 
-int CParser_exec(CParser *parser)
+int CParser_exec(const char *path)
 {
-	CScope *scope = CScope_create();
+	CScope *scope;
 	int res = 1;
-	StreamCToken tokens;
 	CKeyword keyword;
 	char *name;
 	CType type;
 
-	if (!CBuf_readTokens(&parser->buf))
+	if (!CScope_create(path, &scope))
 		return 0;
-	tokens = StreamCToken_init(parser->buf.tokens);
 	if (!populate_keywords(scope))
 		return 0;
-	printf("size: %u\n", sizeof(double));
-	terminal_show();
-	while (StreamCToken_at(&tokens, NULL)) {
-		if (CKeyword_poll(scope, &tokens, &keyword, NULL)) {
+	if (!CStream_nextBatch(scope->stream))
+		return 0;
+	while (!CStream_isEof(scope->stream)) {
+		if (CKeyword_poll(scope, scope->stream, &keyword, NULL)) {
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
-				if (!CType_parseFull(scope, &tokens, &name, &type, NULL, NULL)) {
+				if (!CType_parseFull(scope, scope->stream, &name, &type, NULL, NULL)) {
 					res = 0;
 					goto end_loop;
 				}
@@ -296,12 +300,12 @@ void CParser_destroy(CParser parser)
 	return;
 }
 
-int CKeyword_poll(CScope *scope, StreamCToken *tokens, CKeyword *pres, CContext *ctx)
+int CKeyword_poll(CScope *scope, CStream *tokens, CKeyword *pres, CContext *ctx)
 {
 	CToken cur;
 	CSymbol sym;
 
-	if (!StreamCToken_at(tokens, &cur))
+	if (!CStream_at(tokens, &cur))
 		return 0;
 	if (!CScope_resolve(scope, cur.str, &sym))
 		return 0;
@@ -310,6 +314,6 @@ int CKeyword_poll(CScope *scope, StreamCToken *tokens, CKeyword *pres, CContext 
 	*pres = (CKeyword)sym.data;
 	if (ctx != NULL)
 		*ctx = cur.ctx;
-	StreamCToken_forward(tokens);
+	CStream_forward(tokens);
 	return 1;
 }

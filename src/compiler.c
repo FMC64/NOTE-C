@@ -60,114 +60,37 @@ int VecCToken_at(VecCToken vec, size_t i, CToken *pres)
 	return 0;
 }
 
-void VecCToken_destroy(VecCToken vec)
+void VecCToken_flush(VecCToken *vec)
 {
 	size_t i;
 
-	for (i = 0; i < vec.count; i++)
-		CToken_destroy(vec.token[i]);
-	free(vec.token);
+	for (i = 0; i < vec->count; i++)
+		CToken_destroy(vec->token[i]);
+	free(vec->token);
+	vec->count = 0;
+	vec->token = NULL;
 }
 
-StreamCToken StreamCToken_init(VecCToken vec)
+void VecCToken_moveArea(VecCToken *src, size_t src_start, size_t src_size, VecCToken *dst)
 {
-	StreamCToken res;
+	size_t i;
 
-	res.vec = vec;
-	res.i = 0;
-	return res;
+	for (i = 0; i < src_size; i++)
+		VecCToken_add(dst, src->token[src_start + i]);
+	src->count -= src_size;
+	for (i = src_start; i < src->count; i++)
+		src->token[i] = src->token[i + src_size];
 }
 
-void StreamCToken_begin(StreamCToken *stream)
+void VecCToken_merge(VecCToken *dst, VecCToken *to_append)
 {
-	stream->i = 0;
+	VecCToken_moveArea(to_append, 0, to_append->count, dst);
+	VecCToken_destroy(*to_append);
 }
 
-void StreamCToken_end(StreamCToken *stream)
+void VecCToken_destroy(VecCToken vec)
 {
-	if (stream->vec.count > 0)
-		stream->i = stream->vec.count - 1;
-	else
-		stream->i = 0;
-}
-
-int StreamCToken_forward(StreamCToken *stream)
-{
-	stream->i++;
-}
-
-int StreamCToken_back(StreamCToken *stream)
-{
-	stream->i--;
-}
-
-int StreamCToken_at(StreamCToken *stream, CToken *pres)
-{
-	return VecCToken_at(stream->vec, stream->i, pres);
-}
-
-int StreamCToken_poll(StreamCToken *stream, CToken *pres)
-{
-	int res;
-
-	res = StreamCToken_at(stream, pres);
-	if (res)
-		StreamCToken_forward(stream);
-	return res;
-}
-
-int StreamCToken_pollRev(StreamCToken *stream, CToken *pres)
-{
-	int res;
-
-	res = StreamCToken_at(stream, pres);
-	if (res)
-		StreamCToken_back(stream);
-	return res;
-}
-
-CContext StreamCToken_lastCtx(StreamCToken *stream)
-{
-	if (stream->vec.count > 0)
-		return stream->vec.token[stream->vec.count - 1].ctx;
-	else
-		return CContext_null();
-}
-
-CContext StreamCToken_atCtx(StreamCToken *stream)
-{
-	if (stream->i < stream->vec.count)
-		return stream->vec.token[stream->i].ctx;
-	else
-		return StreamCToken_lastCtx(stream);
-}
-
-int StreamCToken_pollStr(StreamCToken *tokens, const char *str, CContext *ctx)
-{
-	CToken cur;
-	int res;
-
-	if (!StreamCToken_at(tokens, &cur)) {
-		if (ctx != NULL)
-			*ctx = StreamCToken_lastCtx(tokens);
-		return 0;
-	}
-	if (ctx != NULL)
-		*ctx = cur.ctx;
-	res = streq(cur.str, str);
-	if (res)
-		StreamCToken_forward(tokens);
-	return res;
-}
-
-int StreamCToken_pollLpar(StreamCToken *tokens, CContext *ctx)
-{
-	return StreamCToken_pollStr(tokens, "(", ctx);
-}
-
-int StreamCToken_pollRpar(StreamCToken *tokens, CContext *ctx)
-{
-	return StreamCToken_pollStr(tokens, ")", ctx);
+	VecCToken_flush(&vec);
 }
 
 CBuf CBuf_init(char *input_path)
@@ -243,7 +166,6 @@ static char* get_identifier(char *str, size_t *i)
 	memcpy(res, &str[*i], size);
 	res[size] = 0;
 
-	*i += size;
 	return res;
 }
 
@@ -255,20 +177,24 @@ int get_escaped_string(Str str, char **pres, CContext ctx)
 	return 1;
 }
 
-static CTokenParserState CTokenParserState_init(void)
+static void CTokenParserState_forward(CTokenParserState *s, size_t off)
 {
-	CTokenParserState res;
-
-	res.i = 0;
-	res.is_comment = 0;
-	res.is_comment_single_line = 0;
-	res.is_quote = 0;
-	res.line = 0;
-	res.line_start = 0;
-	return res;
+	s->i += off;
+	s->i_file += off;
 }
 
-static int StreamCToken_readTokens(StreamCToken *stream, VecCToken *dst)
+static int StreamCToken_pollFile(StreamCToken *stream)
+{
+	if (stream->isFileDone)
+		return 1;
+	memcpy(stream->buf, &stream->buf[STREAMCTOKEN_BUFSIZE], STREAMCTOKEN_BUFSIZE);
+	if (!StreamCToken_pollFileBytes(stream, STREAMCTOKEN_BUFSIZE, STREAMCTOKEN_BUFSIZE))
+		return 0;
+	stream->parserState.i -= STREAMCTOKEN_BUFSIZE;
+	return 1;
+}
+
+int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 {
 	char *sep[] = {" ", "\t", "\n", NULL};
 	char *op[] = {"->", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^|", "|=",
@@ -280,21 +206,27 @@ static int StreamCToken_readTokens(StreamCToken *stream, VecCToken *dst)
 	CContext ctx;
 	char *found;
 
-	while (1) {
-		ctx = CContext_init(stream->filename, s->line + 1, s->i - s->line_start + 1);
+	*is_err = 0;
+	while (stream->buf[s->i] != 0) {
+		if ((s->i >= STREAMCTOKEN_BUFSIZE) && (!s->is_quote))
+			if (!StreamCToken_pollFile(stream)) {
+				*is_err = 1;
+				return 0;
+			}
+		ctx = CContext_init(stream->filepath, s->line + 1, s->i_file - s->line_start + 1);
 		if (stream->buf[s->i] == '\n') {
 			s->line++;
-			s->line_start = s->i + 1;
+			s->line_start = s->i_file + 1;
 			s->is_comment_single_line = 0;
 		}
 		if (s->is_comment_single_line) {
-			s->i++;
+			CTokenParserState_forward(s, 1);
 			continue;
 		}
 		if (s->is_comment) {
 			if (streq_part(&stream->buf[s->i], "*/")) {
 				s->is_comment = 0;
-				s->i += 2;
+				CTokenParserState_forward(s, 2);
 				continue;
 			}
 			s->i++;
@@ -302,71 +234,66 @@ static int StreamCToken_readTokens(StreamCToken *stream, VecCToken *dst)
 		}
 		if ((stream->buf[s->i] == '"') || (stream->buf[s->i] == '\'')) {
 			if (!s->is_quote)
-				s->quote_char = stream->buf[i];
+				s->quote_char = stream->buf[s->i];
 			if ((!s->is_quote) || (stream->buf[s->i] == s->quote_char)) {
 				if (s->is_quote) {
-					s->i++;
-					if (!get_escaped_string(Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]), &found, ctx))
+					CTokenParserState_forward(s, 1);
+					if (!get_escaped_string(Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]), &found, ctx)) {
+						*is_err = 1;
 						return 0;
-					VecCToken_add(dst, CToken_init(CTOKEN_IDENTIFIER, found, ctx));
+					}
+					*pres = CToken_init(CTOKEN_IDENTIFIER, found, ctx);
 				} else {
 					s->quote_start = s->i;
 					s->quote_start_ctx = ctx;
 				}
 				s->is_quote = !s->is_quote;
 				if (!s->is_quote)
-					continue;
+					return 1;
 			}
 		}
 		if (s->is_quote) {
-			s->i++;
+			CTokenParserState_forward(s, 1);
 			continue;
 		}
 		if (streq_part(&stream->buf[s->i], "//")) {
 			s->is_comment_single_line = 1;
-			s->i += 2;
+			CTokenParserState_forward(s, 2);
 			continue;
 		}
 		if (streq_part(&stream->buf[s->i], "/*")) {
 			s->is_comment = 1;
-			s->i += 2;
+			CTokenParserState_forward(s, 2);
 			continue;
 		}
 		if (streq_part_in_arr(&stream->buf[s->i], sep, &found)) {
-			s->i += strlen(found);
+			CTokenParserState_forward(s, strlen(found));
 			continue;
 		}
 		if (streq_part_in_arr(&stream->buf[s->i], op, &found)) {
-			VecCToken_add(dst,
-			CToken_init(CTOKEN_OPERATOR, string_create_from_Str(Str_init_from_string(found)), ctx));
-			s->i += strlen(found);
-			continue;
+			*pres = CToken_init(CTOKEN_OPERATOR, string_create_from_Str(Str_init_from_string(found)), ctx);
+			CTokenParserState_forward(s, strlen(found));
+			return 1;
 		}
 		found = get_identifier(stream->buf, &s->i);
 		if (strlen(found) == 0) {
 			free(found);
-			terminal_flush();
-
-			CContext_print(ctx);
-			printf("Unknown character: '%c'\n", stream->buf[s->i]);
-
-			terminal_show();
+			printf_error(ctx, "Unknown character: '%c'\n", stream->buf[s->i]);
+			*is_err = 1;
 			return 0;
 		}
-		VecCToken_add(dst, CToken_init(CTOKEN_IDENTIFIER, found, ctx));
+		CTokenParserState_forward(s, strlen(found));
+		*pres = CToken_init(CTOKEN_IDENTIFIER, found, ctx);
+		return 1;
 	}
 	if (s->is_quote) {
-		terminal_flush();
-
 		printf("Unfinished string started at:\n");
 		CContext_print(s->quote_start_ctx);
 		printf("with character: %c\n", s->quote_char);
-
-		terminal_show();
+		*is_err = 1;
 		return 0;
 	}
-	//VecCToken_print(buf->tokens);
-	return 1;
+	return 0;
 }
 
 int CBuf_readTokens(CBuf *buf)
@@ -380,7 +307,7 @@ int CBuf_readTokens(CBuf *buf)
 	fx_assert(Bfile_ReadFile(buf->input_file, str, size, 0), buf->input_file_path);
 	str[size] = 0;
 
-	res = read_tokens(buf, str);
+	//res = read_tokens(buf, str);
 
 	free(str);
 	return res;
@@ -394,13 +321,11 @@ void CBuf_destroy(CBuf buf)
 	return;
 }
 
-void CCompiler(char *path)
+void CCompiler(const char *path)
 {
 	int res;
 
-	CParser parser = CParser_init(path);
-
-	res = CParser_exec(&parser);
+	res = CParser_exec(path);
 
 	printf("\n");
 	if (res)
@@ -409,6 +334,5 @@ void CCompiler(char *path)
 		printf("%s can't be compiled.\n", path);
 	terminal_show();
 
-	CParser_destroy(parser);
 	return;
 }

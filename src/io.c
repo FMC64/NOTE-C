@@ -39,7 +39,7 @@ const char* file_shortpath(const char *src)
 	return &src[i];
 }
 
-static const char* IML_FILLEERR_string(int code)
+const char* IML_FILLEERR_str(int code)
 {
 	switch (code)
 	{
@@ -134,7 +134,7 @@ void fx_error_real(int code, const char *context, Context ctx)
 
 	printf("ERROR\n\n");
 	Context_print_term(ctx);
-	printf("Code: %s\n", IML_FILLEERR_string(code));
+	printf("Code: %s\n", IML_FILLEERR_str(code));
 	if (context == NULL)
 		printf("No further info.");
 	else
