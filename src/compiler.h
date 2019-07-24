@@ -77,7 +77,7 @@ CParser CParser_init(char *source_path);
 int CParser_exec(const char *path);
 void CParser_destroy(CParser parser);
 
-int CKeyword_poll(CScope *scope, CStream *tokens, CKeyword *pres, CContext *ctx);
+int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx);
 
 
 void CCompiler(const char *path);
@@ -102,12 +102,12 @@ CTypeFull* CTypeFull_createPrimitive(CPrimitiveType type, size_t bits);
 
 void CFunction_destroy(CFunction *func);
 
-int CVariable_parse(CScope *scope, CStream *tokens, CVariable **pres, VecStr *pargs);
+int CVariable_parse(CScope *scope, CVariable **pres, VecStr *pargs);
 void CVariable_destroy(CVariable *variable);
 
-int CTypeFull_parse(CScope *scope, CStream *tokens, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName);
-int CType_parseFull(CScope *scope, CStream *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName);
-int CType_parse(CScope *scope, CStream *tokens, CType *pres);
+int CTypeFull_parse(CScope *scope, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName);
+int CType_parseFull(CScope *scope, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName);
+int CType_parse(CScope *scope, CType *pres);
 void CType_shrink(CScope *scope, CType *to_shrink);
 
 CTypeFull* CTypeFull_alloc(CTypeFull base);

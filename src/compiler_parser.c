@@ -288,10 +288,10 @@ int CParser_exec(const char *path)
 		return 0;
 	}
 	while (!CStream_isEof(scope->stream)) {
-		if (CKeyword_poll(scope, scope->stream, &keyword, NULL)) {
+		if (CKeyword_poll(scope, &keyword, NULL)) {
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
-				if (!CType_parseFull(scope, scope->stream, &name, &type, NULL, NULL)) {
+				if (!CType_parseFull(scope, &name, &type, NULL, NULL)) {
 					CScope_destroy(scope);
 					return 0;
 				}
@@ -324,12 +324,12 @@ void CParser_destroy(CParser parser)
 	return;
 }
 
-int CKeyword_poll(CScope *scope, CStream *tokens, CKeyword *pres, CContext *ctx)
+int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx)
 {
 	CToken cur;
 	CSymbol sym;
 
-	if (!CStream_at(tokens, &cur))
+	if (!CStream_at(scope->stream, &cur))
 		return 0;
 	if (!CScope_resolve(scope, cur.str, &sym))
 		return 0;
@@ -338,6 +338,6 @@ int CKeyword_poll(CScope *scope, CStream *tokens, CKeyword *pres, CContext *ctx)
 	*pres = (CKeyword)sym.data;
 	if (ctx != NULL)
 		*ctx = cur.ctx;
-	CStream_forward(tokens);
+	CStream_forward(scope->stream);
 	return 1;
 }

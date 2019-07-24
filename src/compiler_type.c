@@ -163,7 +163,7 @@ static int get_storage(CKeyword keyword, CStorageType *storage)
 	return 0;
 }
 
-static int poll_attributes(CScope *scope, CStream *tokens, CTypeFlag *flags, CStorageType *pstorage)
+static int poll_attributes(CScope *scope, CTypeFlag *flags, CStorageType *pstorage)
 {
 	CKeyword keyword;
 	CTypeFlag flag;
@@ -173,7 +173,7 @@ static int poll_attributes(CScope *scope, CStream *tokens, CTypeFlag *flags, CSt
 	*flags = 0;
 	if (pstorage != NULL)
 		*pstorage = CSTORAGE_DEFAULT;
-	while (CKeyword_poll(scope, tokens, &keyword, &ctx)) {
+	while (CKeyword_poll(scope, &keyword, &ctx)) {
 		if (get_flag(keyword, &flag)) {
 			if (*flags & flag) {
 				printf_error(ctx, "redeclaration of flag '%s'", CTypeFlag_str(flag));
@@ -194,7 +194,7 @@ static int poll_attributes(CScope *scope, CStream *tokens, CTypeFlag *flags, CSt
 			}
 			*pstorage = storage;
 		} else {
-			CStream_back(tokens);
+			CStream_back(scope->stream);
 			break;
 		}
 	}
@@ -366,7 +366,7 @@ static CPrimitiveType get_int_primitive_type(CPrimitiveFlag flags)
 		return CPRIMITIVE_SINT;
 }
 
-static int poll_primitive(CScope *scope, CStream *tokens, CPrimitive *pres)
+static int poll_primitive(CScope *scope, CPrimitive *pres)
 {
 	CKeyword keyword;
 	CPrimitiveFlag flags = 0;
@@ -374,7 +374,7 @@ static int poll_primitive(CScope *scope, CStream *tokens, CPrimitive *pres)
 	CPrimitiveFlag flag;
 	CContext ctx;
 
-	while (CKeyword_poll(scope, tokens, &keyword, &ctx)) {
+	while (CKeyword_poll(scope, &keyword, &ctx)) {
 		if (keyword == CKEYWORD_LONG) {
 			longCount++;
 			if (!are_flags_coherent(flags, longCount, ctx))
@@ -389,7 +389,7 @@ static int poll_primitive(CScope *scope, CStream *tokens, CPrimitive *pres)
 			if (!are_flags_coherent(flags, longCount, ctx))
 				return 0;
 		} else {
-			CStream_back(tokens);
+			CStream_back(scope->stream);
 			break;
 		}
 	}
@@ -426,7 +426,7 @@ static int poll_primitive(CScope *scope, CStream *tokens, CPrimitive *pres)
 		pres->data = (void*)4;
 		return 1;
 	} else {
-		printf_error_part(CStream_atCtx(tokens), "unsupported type '");
+		printf_error_part(CStream_atCtx(scope->stream), "unsupported type '");
 		print_primitive(flags, longCount);
 		printf("'\n\n");
 		return 0;
@@ -511,7 +511,7 @@ static CTypeFull* CTypeFull_initFunction(CScope *scope, CTypeFull *returnType, C
 	return CTypeFull_alloc(res);
 }
 
-static int poll_function(CScope *scope, CStream *tokens, int hasPolled, CTypeFull *pres, VecStr *pargsName)
+static int poll_function(CScope *scope, int hasPolled, CTypeFull *pres, VecStr *pargsName)
 {
 	CType type;
 	VecStr args = VecStr_init();
@@ -521,19 +521,19 @@ static int poll_function(CScope *scope, CStream *tokens, int hasPolled, CTypeFul
 	char *name;
 
 	if (!hasPolled)
-		if (!CStream_pollLpar(tokens, &ctx)) {
+		if (!CStream_pollLpar(scope->stream, &ctx)) {
 			printf_error(ctx, "missing '(' for declaring function arguments");
 			return 0;
 		}
-	while ((!CStream_pollRpar(tokens, &ctx)) || forceContinue) {
-		if (!CType_parseFull(scope, tokens, &name, &type, NULL, NULL)) {
+	while ((!CStream_pollRpar(scope->stream, &ctx)) || forceContinue) {
+		if (!CType_parseFull(scope, &name, &type, NULL, NULL)) {
 			VecStr_destroy(args);
 			return 0;
 		}
 		if (CType_primitiveType(type) != CPRIMITIVE_VOID) {
 			CFunction_addArg(pres->primitive.data, type);
 			VecStr_add(&args, name != NULL ? strdup(name) : name);
-			forceContinue = CStream_pollStr(tokens, ",", NULL);
+			forceContinue = CStream_pollStr(scope->stream, ",", NULL);
 		}
 	}
 	if (pargsName != NULL)
@@ -562,12 +562,12 @@ static CVariable* CVariable_alloc(CVariable base)
 	return res;
 }
 
-int CVariable_parse(CScope *scope, CStream *tokens, CVariable **pres, VecStr *pargs)
+int CVariable_parse(CScope *scope, CVariable **pres, VecStr *pargs)
 {
 	CVariable *res = CVariable_alloc(CVariable_default());
 	char *name;
 
-	if (!CTypeFull_parse(scope, tokens, &name, &res->type.full, &res->storage, pargs)) {
+	if (!CTypeFull_parse(scope, &name, &res->type.full, &res->storage, pargs)) {
 		CVariable_destroy(res);
 		return 0;
 	}
@@ -594,7 +594,7 @@ CTypeFull* CTypeFull_alloc(CTypeFull base)
 	return res;
 }
 
-int CTypeFull_parse(CScope *scope, CStream *tokens, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName)
+int CTypeFull_parse(CScope *scope, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName)
 {
 	CTypeFull *res = CTypeFull_alloc(CTypeFull_default());
 	int isFun = 0;
@@ -603,28 +603,28 @@ int CTypeFull_parse(CScope *scope, CStream *tokens, char **pname, CTypeFull **pr
 	CContext ctx;
 
 	*pname = NULL;
-	if (!poll_attributes(scope, tokens, &res->flags, pstorage))
+	if (!poll_attributes(scope, &res->flags, pstorage))
 		goto CTypeFull_parse_error;
-	if (!poll_primitive(scope, tokens, &res->primitive))
+	if (!poll_primitive(scope, &res->primitive))
 		goto CTypeFull_parse_error;
-	if (!poll_reference(tokens, NULL, &res->ref))
+	if (!poll_reference(scope->stream, NULL, &res->ref))
 		goto CTypeFull_parse_error;
-	isFun = CStream_pollLpar(tokens, NULL);
-	if (!poll_reference(tokens, pname, &funRef))
+	isFun = CStream_pollLpar(scope->stream, NULL);
+	if (!poll_reference(scope->stream, pname, &funRef))
 		goto CTypeFull_parse_error;
 	if (isFun)
-		if (!CStream_pollRpar(tokens, &ctx)) {
+		if (!CStream_pollRpar(scope->stream, &ctx)) {
 			printf_error(ctx, "missing ')' for closing function name");
 			goto CTypeFull_parse_error;
 		}
-	hasPolled = CStream_pollLpar(tokens, NULL);
+	hasPolled = CStream_pollLpar(scope->stream, NULL);
 	if (hasPolled || isFun) {
 		res = CTypeFull_initFunction(scope, res, funRef);
-		if (!poll_function(scope, tokens, hasPolled, res, pargsName))
+		if (!poll_function(scope, hasPolled, res, pargsName))
 			goto CTypeFull_parse_error;
 	}
 	if (*pname == NULL)
-		if (!poll_reference(tokens, pname, &res->ref))
+		if (!poll_reference(scope->stream, pname, &res->ref))
 			goto CTypeFull_parse_error;
 	*pres = res;
 	return 1;
@@ -686,22 +686,22 @@ void CType_shrink(CScope *scope, CType *to_shrink)
 	}
 }
 
-int CType_parseFull(CScope *scope, CStream *tokens, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName)
+int CType_parseFull(CScope *scope, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName)
 {
 	CType res = CType_default();
 
-	if (!CTypeFull_parse(scope, tokens, pname, &res.full, pstorage, pargsName))
+	if (!CTypeFull_parse(scope, pname, &res.full, pstorage, pargsName))
 		return 0;
 	CType_shrink(scope, &res);
 	*pres = res;
 	return 1;
 }
 
-int CType_parse(CScope *scope, CStream *tokens, CType *pres)
+int CType_parse(CScope *scope, CType *pres)
 {
 	char *name;
 
-	return CType_parseFull(scope, tokens, &name, pres, NULL, NULL);
+	return CType_parseFull(scope, &name, pres, NULL, NULL);
 }
 
 static void print_tabs(size_t count)
