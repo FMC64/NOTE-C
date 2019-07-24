@@ -68,6 +68,7 @@ void VecCToken_flush(VecCToken *vec)
 		CToken_destroy(vec->token[i]);
 	free(vec->token);
 	vec->count = 0;
+	vec->allocated = 0;
 	vec->token = NULL;
 }
 
@@ -287,9 +288,10 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 		return 1;
 	}
 	if (s->is_quote) {
-		printf("Unfinished string started at:\n");
-		CContext_print(s->quote_start_ctx);
-		printf("with character: %c\n", s->quote_char);
+		if (stream->isFileDone)
+			printf_error(s->quote_start_ctx, "unfinished string started with character: %c\n", s->quote_char);
+		else
+			printf_error(s->quote_start_ctx, "out of buffer string started with character %c (exceeds %u bytes limit)\n", s->quote_char, STREAMCTOKEN_BUFSIZE);
 		*is_err = 1;
 		return 0;
 	}

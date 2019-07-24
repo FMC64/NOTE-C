@@ -257,6 +257,16 @@ CParser CParser_init(char *source_path)
 	return res;
 }
 
+static void print_error_unexp_token_at(CScope *scope)
+{
+	const char *str = "{undefined}";
+	CToken cur;
+
+	if (CStream_at(scope->stream, &cur))
+		str = cur.str;
+	printf_error(CStream_atCtx(scope->stream), "unexpected token: '%s'", str);
+}
+
 int CParser_exec(const char *path)
 {
 	CScope *scope;
@@ -265,33 +275,47 @@ int CParser_exec(const char *path)
 	char *name;
 	CType type;
 
-	if (!CScope_create(path, &scope))
+	if (!CScope_create(path, &scope)) {
+		CScope_destroy(scope);
 		return 0;
-	if (!populate_keywords(scope))
+	}
+	if (!populate_keywords(scope)) {
+		CScope_destroy(scope);
 		return 0;
-	if (!CStream_nextBatch(scope->stream))
+	}
+	if (!CStream_nextBatch(scope->stream)) {
+		CScope_destroy(scope);
 		return 0;
+	}
 	while (!CStream_isEof(scope->stream)) {
 		if (CKeyword_poll(scope, scope->stream, &keyword, NULL)) {
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
 				if (!CType_parseFull(scope, scope->stream, &name, &type, NULL, NULL)) {
-					res = 0;
-					goto end_loop;
+					CScope_destroy(scope);
+					return 0;
 				}
 				CType_print(type);
-				terminal_show();
-				//memcheck_stats();
+				printf("\n");
 				CType_destroy(type);
-				//memcheck_stats();
 				break;
+			default:
+				print_error_unexp_token_at(scope);
+				CScope_destroy(scope);
+				return 0;
 			}
-		} else
-			break;
+		} else {
+			print_error_unexp_token_at(scope);
+			CScope_destroy(scope);
+			return 0;
+		}
+		if (!CStream_nextBatch(scope->stream)) {
+			CScope_destroy(scope);
+			return 0;
+		}
 	}
-	end_loop:
 	CScope_destroy(scope);
-	return res;
+	return 1;
 }
 
 void CParser_destroy(CParser parser)
