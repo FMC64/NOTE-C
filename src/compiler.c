@@ -170,10 +170,11 @@ static char* get_identifier(char *str, size_t *i)
 	return res;
 }
 
-int get_escaped_string(Str str, char **pres, CContext ctx)
+static int get_escaped_string(Str str, char **pres, size_t *res_size, CContext ctx)
 {
 	if (!Str_escape(str, &str, ctx))
 		return 0;
+	*res_size = str.size;
 	*pres = Str_to_string(str);
 	return 1;
 }
@@ -206,10 +207,13 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 	CTokenParserState *s = &stream->parserState;
 	CContext ctx;
 	char *found;
+	int isMacro = 0;
+	size_t macroStart = 0;
+	size_t esc_size;
 
 	*is_err = 0;
 	while (stream->buf[s->i] != 0) {
-		if ((s->i >= STREAMCTOKEN_BUFSIZE) && (!s->is_quote))
+		if ((s->i >= STREAMCTOKEN_BUFSIZE) && (!(s->is_quote || isMacro)))
 			if (!StreamCToken_pollFile(stream)) {
 				*is_err = 1;
 				return 0;
@@ -219,6 +223,15 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 			s->line++;
 			s->line_start = s->i_file + 1;
 			s->is_comment_single_line = 0;
+		}
+		if (isMacro) {
+			if (stream->buf[s->i] == '\n') {
+				*pres = CToken_init(CTOKEN_MACRO, string_create_from_Str(Str_init(s->i - macroStart, &stream->buf[macroStart])), ctx);
+				CTokenParserState_forward(s, 1);
+				return 1;
+			}
+			CTokenParserState_forward(s, 1);
+			continue;
 		}
 		if (s->is_comment_single_line) {
 			CTokenParserState_forward(s, 1);
@@ -239,11 +252,25 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 			if ((!s->is_quote) || (stream->buf[s->i] == s->quote_char)) {
 				if (s->is_quote) {
 					CTokenParserState_forward(s, 1);
-					if (!get_escaped_string(Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]), &found, ctx)) {
+					if (!get_escaped_string(Str_init(s->i - s->quote_start - 2, &stream->buf[s->quote_start + 1]), &found, &esc_size, ctx)) {
 						*is_err = 1;
 						return 0;
 					}
-					*pres = CToken_init(CTOKEN_IDENTIFIER, found, ctx);
+					if (s->quote_char == '\'') {
+						if (esc_size > 1) {
+							printf_error(ctx, "only one character can fit in this. you tried to stuff %u instead.", esc_size);
+							free(found);
+							*is_err = 1;
+							return 0;
+						}
+						if (esc_size == 0) {
+							printf_error(ctx, "you forgot to put a character there !");
+							free(found);
+							*is_err = 1;
+							return 0;
+						}
+					}
+					*pres = CToken_init(s->quote_char == '"' ? CTOKEN_STRING_DOUBLE : CTOKEN_STRING_SIMPLE, found, ctx);
 				} else {
 					s->quote_start = s->i;
 					s->quote_start_ctx = ctx;
@@ -265,6 +292,11 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 		if (streq_part(&stream->buf[s->i], "/*")) {
 			s->is_comment = 1;
 			CTokenParserState_forward(s, 2);
+			continue;
+		}
+		if (stream->buf[s->i] == '#') {
+			macroStart = s->i;
+			isMacro = 1;
 			continue;
 		}
 		if (streq_part_in_arr(&stream->buf[s->i], sep, &found)) {

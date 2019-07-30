@@ -51,9 +51,9 @@ static int escape_raw(StreamCToken *stream, size_t start, size_t size)
 				}
 			}
 			if (next == '\n') {
-				for (j = i; j + 2 < size; j++)
+				for (j = i; j + 2 < size; j++)	// delete both \ and linefeed
 					stream->buf[start + j] = stream->buf[start + j + 2];
-				if (!StreamCToken_pollFileBytes(stream, start + size - 2, 2))
+				if (!StreamCToken_pollFileBytes(stream, start + size - 2, 2))	// feed 2 missing bytes at the end of the buffer
 					return 0;
 			}
 		}
