@@ -28,10 +28,35 @@ int StreamCToken_create(const char *filepath, StreamCToken *pres)
 	}
 	res.filepath = strdup(filepath);
 	res.isFileDone = 0;
-	res.buf = (char*)malloc(STREAMCTOKEN_BUFSIZE * 2 + 1);
+	res.buf = (char*)malloc(STREAMCTOKEN_BUFSIZE * 2);
 	StreamCToken_pollFileBytes(&res, 0, STREAMCTOKEN_BUFSIZE * 2);
 	res.parserState = CTokenParserState_init();
 	*pres = res;
+	return 1;
+}
+
+static int escape_raw(StreamCToken *stream, size_t start, size_t size)
+{
+	size_t i;
+	size_t j;
+	char next;
+
+	for (i = 0; i < size; i++)
+		if (stream->buf[start + i] == '\\') {
+			next = stream->buf[start + i + 1];
+			if (next == 0) {
+				if (Bfile_ReadFile(stream->filehandle, &next, 1, -1) != 1) {
+					printf_error(CContext_init(stream->filepath, 0, 0), "last file character is a \\");
+					return 0;
+				}
+			}
+			if (next == '\n') {
+				for (j = i; j + 2 < size; j++)
+					stream->buf[start + j] = stream->buf[start + j + 2];
+				if (!StreamCToken_pollFileBytes(stream, start + size - 2, 2))
+					return 0;
+			}
+		}
 	return 1;
 }
 
@@ -44,9 +69,11 @@ int StreamCToken_pollFileBytes(StreamCToken *stream, size_t buf_start, size_t si
 		printf_error(CContext_init(stream->filepath, 0, 0), "file cannot be read: %s", IML_FILLEERR_str(got));
 		return 0;
 	}
-	stream->buf[got] = 0;
+	stream->buf[buf_start + got] = 0;
 	if (got < size)
 		stream->isFileDone = 1;
+	if (!escape_raw(stream, buf_start, got))
+		return 0;
 	return 1;
 }
 
