@@ -336,7 +336,7 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 		if (isMacro) {
 			if (stream->buf[s->i] == '\n') {
 				Str_append(&acc, Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]));
-				*pres = CToken_init(CTOKEN_MACRO, string_create_from_Str(acc), ctx);
+				*pres = CToken_init(CTOKEN_MACRO, string_create_from_Str(acc), s->quote_start_ctx);
 				Str_destroy(acc);
 				CTokenParserState_forward(s, 1);
 				return 1;
@@ -384,7 +384,7 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 							return 0;
 						}
 					}
-					*pres = CToken_init(s->quote_char == '"' ? CTOKEN_STRING_DOUBLE : CTOKEN_STRING_SIMPLE, found, ctx);
+					*pres = CToken_init(s->quote_char == '"' ? CTOKEN_STRING_DOUBLE : CTOKEN_STRING_SIMPLE, found, s->quote_start_ctx);
 				} else {
 					s->quote_start = s->i + 1;
 					acc = Str_empty();
@@ -413,6 +413,8 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 			s->quote_start = s->i + 1;
 			acc = Str_empty();
 			isMacro = 1;
+			s->quote_start_ctx = ctx;
+			s->quote_start_ctx.colon++;
 			continue;
 		}
 		if (streq_part_in_arr(&stream->buf[s->i], sep, &found)) {
