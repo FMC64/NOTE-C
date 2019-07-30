@@ -176,6 +176,17 @@ static int is_token_end_batch(CToken token)
 	return streq(token.str, ";");
 }
 
+static int parse_macro(CStream *stream, CToken token)
+{
+	VecCToken tokens;
+
+	if (!VecCToken_from_CToken(token, &tokens))
+		return 0;
+	VecCToken_print(tokens);
+	VecCToken_destroy(tokens);
+	return 1;
+}
+
 static int poll_tokens(CStream *stream, VecCToken *pres)
 {
 	VecCToken res = VecCToken_init();
@@ -195,9 +206,18 @@ static int poll_tokens(CStream *stream, VecCToken *pres)
 			}
 			VecStreamCToken_move(&stream->streams, stream->streams.size - 1, &stream->terminatedStreams);
 		} else {
-			VecCToken_add(&res, cur);
-			if (is_token_end_batch(cur))
-				break;
+			if (cur.type == CTOKEN_MACRO) {
+				if (!parse_macro(stream, cur)) {
+					CToken_destroy(cur);
+					VecCToken_destroy(res);
+					return 0;
+				}
+				CToken_destroy(cur);
+			} else {
+				VecCToken_add(&res, cur);
+				if (is_token_end_batch(cur))
+					break;
+			}
 		}
 	}
 	*pres = res;

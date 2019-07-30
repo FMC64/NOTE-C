@@ -193,31 +193,140 @@ static int StreamCToken_pollFile(StreamCToken *stream)
 	if (!StreamCToken_pollFileBytes(stream, STREAMCTOKEN_BUFSIZE, STREAMCTOKEN_BUFSIZE))
 		return 0;
 	stream->parserState.i -= STREAMCTOKEN_BUFSIZE;
+	stream->parserState.quote_start = stream->parserState.i;
 	return 1;
+}
+
+static char *sep[] = {" ", "\t", "\n", NULL};
+static char *op[] = {"->", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^|", "|=",
+"++", "--", "<<", ">>", "&&", "||", "==", "!=", "<=", ">=",
+"<", ">", "=", "!", "&", "^", "|", "~",
+"+", "-", "*", "/", "%" ,
+"(", ")", "[", "]", "{", "}", "?", ":", ";", ",", NULL};
+static char *op_macro[] = {"##", NULL};
+
+int VecCToken_from_CToken(const CToken src, VecCToken *pres)
+{
+	VecCToken res = VecCToken_init();
+	const char *str = src.str;
+	CContext ctx;
+	size_t i = 0;
+	int is_comment = 0;
+	int is_quote = 0;
+	char quote_char;
+	size_t quote_start;
+	CContext quote_start_ctx;
+	char *found;
+	size_t esc_size;
+
+	while (str[i] != 0) {
+		ctx = src.ctx;
+		ctx.colon += i;
+		if (is_comment) {
+			if (streq_part(&str[i], "*/")) {
+				is_comment = 0;
+				i += 2;
+				continue;
+			}
+			i++;
+			continue;
+		}
+		if ((str[i] == '"') || (str[i] == '\'')) {
+			if (!is_quote)
+				quote_char = str[i];
+			if ((!is_quote) || (str[i] == quote_char)) {
+				if (is_quote) {
+					i++;
+					if (!get_escaped_string(Str_init(i - quote_start - 1, &str[quote_start]), &found, &esc_size, ctx))
+						goto VecCToken_from_CTokens_end_error;
+					if (quote_char == '\'') {
+						if (esc_size > 1) {
+							printf_error(ctx, "only one character can fit in this. you tried to stuff %u instead.", esc_size);
+							free(found);
+							goto VecCToken_from_CTokens_end_error;
+						}
+						if (esc_size == 0) {
+							printf_error(ctx, "you forgot to put a character there !");
+							free(found);
+							goto VecCToken_from_CTokens_end_error;
+						}
+					}
+					VecCToken_add(&res, CToken_init(quote_char == '"' ? CTOKEN_STRING_DOUBLE : CTOKEN_STRING_SIMPLE, found, ctx));
+				} else {
+					quote_start = i + 1;
+					quote_start_ctx = ctx;
+				}
+				is_quote = !is_quote;
+				if (!is_quote)
+					continue;
+			}
+		}
+		if (is_quote) {
+			i++;
+			continue;
+		}
+		if (streq_part(&str[i], "//"))
+			break;
+		if (streq_part(&str[i], "/*")) {
+			is_comment = 1;
+			continue;
+		}
+		if (streq_part_in_arr(&str[i], sep, &found)) {
+			i += strlen(found);
+			continue;
+		}
+		if (streq_part_in_arr(&str[i], op, &found)) {
+			VecCToken_add(&res, CToken_init(CTOKEN_OPERATOR, string_create_from_Str(Str_init_from_string(found)), ctx));
+			i += strlen(found);
+			continue;
+		}
+		if (streq_part_in_arr(&str[i], op_macro, &found)) {
+			VecCToken_add(&res, CToken_init(CTOKEN_OPERATOR, string_create_from_Str(Str_init_from_string(found)), ctx));
+			i += strlen(found);
+			continue;
+		}
+		found = get_identifier(str, &i);
+		if (strlen(found) == 0) {
+			free(found);
+			printf_error(ctx, "unknown character: '%c'\n", str[i]);
+			goto VecCToken_from_CTokens_end_error;
+		}
+		i += strlen(found);
+		VecCToken_add(&res, CToken_init(CTOKEN_IDENTIFIER, found, ctx));
+	}
+	if (is_quote) {
+		printf_error(quote_start_ctx, "unfinished string started with character: %c\n", quote_char);
+		goto VecCToken_from_CTokens_end_error;
+	}
+	*pres = res;
+	return 1;
+
+VecCToken_from_CTokens_end_error:
+	VecCToken_destroy(res);
+	return 0;
 }
 
 int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 {
-	char *sep[] = {" ", "\t", "\n", NULL};
-	char *op[] = {"->", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^|", "|=",
-	"++", "--", "<<", ">>", "&&", "||", "==", "!=", "<=", ">=",
-	"<", ">", "=", "!", "&", "^", "|", "~",
-	"+", "-", "*", "/", "%" ,
-	"(", ")", "[", "]", "{", "}", "?", ":", ";", ",", "#", NULL};
 	CTokenParserState *s = &stream->parserState;
 	CContext ctx;
 	char *found;
 	int isMacro = 0;
-	size_t macroStart = 0;
 	size_t esc_size;
+	Str acc;
 
 	*is_err = 0;
 	while (stream->buf[s->i] != 0) {
-		if ((s->i >= STREAMCTOKEN_BUFSIZE) && (!(s->is_quote || isMacro)))
+		if (s->i >= STREAMCTOKEN_BUFSIZE) {
+			if (s->is_quote || isMacro)
+				Str_append(&acc, Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]));
 			if (!StreamCToken_pollFile(stream)) {
+				if (s->is_quote || isMacro)
+					Str_destroy(acc);
 				*is_err = 1;
 				return 0;
 			}
+		}
 		ctx = CContext_init(stream->filepath, s->line + 1, s->i_file - s->line_start + 1);
 		if (stream->buf[s->i] == '\n') {
 			s->line++;
@@ -226,7 +335,9 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 		}
 		if (isMacro) {
 			if (stream->buf[s->i] == '\n') {
-				*pres = CToken_init(CTOKEN_MACRO, string_create_from_Str(Str_init(s->i - macroStart, &stream->buf[macroStart])), ctx);
+				Str_append(&acc, Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]));
+				*pres = CToken_init(CTOKEN_MACRO, string_create_from_Str(acc), ctx);
+				Str_destroy(acc);
 				CTokenParserState_forward(s, 1);
 				return 1;
 			}
@@ -243,7 +354,7 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 				CTokenParserState_forward(s, 2);
 				continue;
 			}
-			s->i++;
+			CTokenParserState_forward(s, 1);
 			continue;
 		}
 		if ((stream->buf[s->i] == '"') || (stream->buf[s->i] == '\'')) {
@@ -252,10 +363,13 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 			if ((!s->is_quote) || (stream->buf[s->i] == s->quote_char)) {
 				if (s->is_quote) {
 					CTokenParserState_forward(s, 1);
-					if (!get_escaped_string(Str_init(s->i - s->quote_start - 2, &stream->buf[s->quote_start + 1]), &found, &esc_size, ctx)) {
+					Str_append(&acc, Str_init(s->i - s->quote_start - 1, &stream->buf[s->quote_start]));
+					if (!get_escaped_string(acc, &found, &esc_size, ctx)) {
+						Str_destroy(acc);
 						*is_err = 1;
 						return 0;
 					}
+					Str_destroy(acc);
 					if (s->quote_char == '\'') {
 						if (esc_size > 1) {
 							printf_error(ctx, "only one character can fit in this. you tried to stuff %u instead.", esc_size);
@@ -272,7 +386,8 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 					}
 					*pres = CToken_init(s->quote_char == '"' ? CTOKEN_STRING_DOUBLE : CTOKEN_STRING_SIMPLE, found, ctx);
 				} else {
-					s->quote_start = s->i;
+					s->quote_start = s->i + 1;
+					acc = Str_empty();
 					s->quote_start_ctx = ctx;
 				}
 				s->is_quote = !s->is_quote;
@@ -295,7 +410,8 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 			continue;
 		}
 		if (stream->buf[s->i] == '#') {
-			macroStart = s->i;
+			s->quote_start = s->i + 1;
+			acc = Str_empty();
 			isMacro = 1;
 			continue;
 		}
@@ -311,7 +427,7 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 		found = get_identifier(stream->buf, &s->i);
 		if (strlen(found) == 0) {
 			free(found);
-			printf_error(ctx, "Unknown character: '%c'\n", stream->buf[s->i]);
+			printf_error(ctx, "unknown character: '%c'\n", stream->buf[s->i]);
 			*is_err = 1;
 			return 0;
 		}
@@ -320,12 +436,16 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 		return 1;
 	}
 	if (s->is_quote) {
-		if (stream->isFileDone)
-			printf_error(s->quote_start_ctx, "unfinished string started with character: %c\n", s->quote_char);
-		else
-			printf_error(s->quote_start_ctx, "out of buffer string started with character %c (exceeds %u bytes limit)\n", s->quote_char, STREAMCTOKEN_BUFSIZE);
+		Str_destroy(acc);
+		printf_error(s->quote_start_ctx, "unfinished string started with character: %c\n", s->quote_char);
 		*is_err = 1;
 		return 0;
+	}
+	if (isMacro) {
+		Str_append(&acc, Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]));
+		*pres = CToken_init(CTOKEN_MACRO, string_create_from_Str(acc), ctx);
+		Str_destroy(acc);
+		return 1;
 	}
 	return 0;
 }

@@ -16,6 +16,7 @@ void VecCToken_destroy(VecCToken vec);
 
 int StreamCToken_create(const char *filepath, StreamCToken *pres);
 int StreamCToken_pollFileBytes(StreamCToken *stream, size_t buf_start, size_t size);
+int VecCToken_from_CToken(const CToken src, VecCToken *pres);
 int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_eof);
 void StreamCToken_destroy(StreamCToken stream);
 
