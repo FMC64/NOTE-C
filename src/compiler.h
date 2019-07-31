@@ -14,22 +14,22 @@ void VecCToken_moveArea(VecCToken *src, size_t src_start, size_t src_size, VecCT
 void VecCToken_merge(VecCToken *dst, VecCToken *to_append);
 void VecCToken_destroy(VecCToken vec);
 
-int StreamCToken_create(const char *filepath, StreamCToken *pres);
-int StreamCToken_pollFileBytes(StreamCToken *stream, size_t buf_start, size_t size);
+int CFile_create(const char *filepath, CFile *pres);
+int CFile_pollFileBytes(CFile *stream, size_t buf_start, size_t size);
 int VecCToken_from_CToken(const CToken src, VecCToken *pres);
-int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_eof);
-void StreamCToken_destroy(StreamCToken stream);
+int CFile_readToken(CFile *stream, CToken *pres, int *is_eof);
+void CFile_destroy(CFile stream);
 
-VecStreamCToken VecStreamCToken_init(void);
-void VecStreamCToken_add(VecStreamCToken *vec, StreamCToken to_add);
-void VecStreamCToken_flush(VecStreamCToken *vec);
-void VecStreamCToken_move(VecStreamCToken *src, size_t src_ndx, VecStreamCToken *dst);
-void VecStreamCToken_moveArea(VecStreamCToken *src, size_t src_start, size_t src_size, VecStreamCToken *dst);
-void VecStreamCToken_destroy(VecStreamCToken vec);
+VecCFile VecCFile_init(void);
+void VecCFile_add(VecCFile *vec, CFile to_add);
+void VecCFile_flush(VecCFile *vec);
+void VecCFile_move(VecCFile *src, size_t src_ndx, VecCFile *dst);
+void VecCFile_moveArea(VecCFile *src, size_t src_start, size_t src_size, VecCFile *dst);
+void VecCFile_destroy(VecCFile vec);
 
 int CStream_create(const char *filepath, CStream **pres);
 void CStream_destroy(CStream *stream);
-int CStream_currentStream(CStream *stream, StreamCToken **pres);
+int CStream_currentStream(CStream *stream, CFile **pres);
 int CStream_nextBatch(CStream *stream);
 int CStream_isEof(CStream *stream);
 void CStream_begin(CStream *stream);

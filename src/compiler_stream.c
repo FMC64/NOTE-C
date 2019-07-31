@@ -15,9 +15,9 @@ static CTokenParserState CTokenParserState_init(void)
 	return res;
 }
 
-int StreamCToken_create(const char *filepath, StreamCToken *pres)
+int CFile_create(const char *filepath, CFile *pres)
 {
-	StreamCToken res;
+	CFile res;
 	const FONTCHARACTER *path_real = string_to_fontchar(filepath);
 
 	res.filehandle = Bfile_OpenFile(path_real, _OPENMODE_READ);
@@ -29,13 +29,13 @@ int StreamCToken_create(const char *filepath, StreamCToken *pres)
 	res.filepath = strdup(filepath);
 	res.isFileDone = 0;
 	res.buf = (char*)malloc(STREAMCTOKEN_BUFSIZE * 2);
-	StreamCToken_pollFileBytes(&res, 0, STREAMCTOKEN_BUFSIZE * 2);
+	CFile_pollFileBytes(&res, 0, STREAMCTOKEN_BUFSIZE * 2);
 	res.parserState = CTokenParserState_init();
 	*pres = res;
 	return 1;
 }
 
-static int escape_raw(StreamCToken *stream, size_t start, size_t size)
+static int escape_raw(CFile *stream, size_t start, size_t size)
 {
 	size_t i;
 	size_t j;
@@ -53,14 +53,14 @@ static int escape_raw(StreamCToken *stream, size_t start, size_t size)
 			if (next == '\n') {
 				for (j = i; j + 2 < size; j++)	// delete both \ and linefeed
 					stream->buf[start + j] = stream->buf[start + j + 2];
-				if (!StreamCToken_pollFileBytes(stream, start + size - 2, 2))	// feed 2 missing bytes at the end of the buffer
+				if (!CFile_pollFileBytes(stream, start + size - 2, 2))	// feed 2 missing bytes at the end of the buffer
 					return 0;
 			}
 		}
 	return 1;
 }
 
-int StreamCToken_pollFileBytes(StreamCToken *stream, size_t buf_start, size_t size)
+int CFile_pollFileBytes(CFile *stream, size_t buf_start, size_t size)
 {
 	int got;
 
@@ -77,7 +77,7 @@ int StreamCToken_pollFileBytes(StreamCToken *stream, size_t buf_start, size_t si
 	return 1;
 }
 
-void StreamCToken_destroy(StreamCToken stream)
+void CFile_destroy(CFile stream)
 {
 	int status = Bfile_CloseFile(stream.filehandle);
 
@@ -87,69 +87,69 @@ void StreamCToken_destroy(StreamCToken stream)
 	free(stream.buf);
 }
 
-VecStreamCToken VecStreamCToken_init(void)
+VecCFile VecCFile_init(void)
 {
-	VecStreamCToken res;
+	VecCFile res;
 
 	res.size = 0;
 	res.stream = NULL;
 	return res;
 }
 
-void VecStreamCToken_add(VecStreamCToken *vec, StreamCToken to_add)
+void VecCFile_add(VecCFile *vec, CFile to_add)
 {
 	size_t cur = vec->size++;
 
-	vec->stream = (StreamCToken*)realloc(vec->stream, vec->size * sizeof(StreamCToken));
+	vec->stream = (CFile*)realloc(vec->stream, vec->size * sizeof(CFile));
 	vec->stream[cur] = to_add;
 }
 
-void VecStreamCToken_flush(VecStreamCToken *vec)
+void VecCFile_flush(VecCFile *vec)
 {
 	size_t i;
 
 	for (i = 0; i < vec->size; i++)
-		StreamCToken_destroy(vec->stream[i]);
+		CFile_destroy(vec->stream[i]);
 	free(vec->stream);
 	vec->size = 0;
 	vec->stream = NULL;
 }
 
-void VecStreamCToken_move(VecStreamCToken *src, size_t src_ndx, VecStreamCToken *dst)
+void VecCFile_move(VecCFile *src, size_t src_ndx, VecCFile *dst)
 {
-	VecStreamCToken_moveArea(src, src_ndx, 1, dst);
+	VecCFile_moveArea(src, src_ndx, 1, dst);
 }
 
-void VecStreamCToken_moveArea(VecStreamCToken *src, size_t src_start, size_t src_size, VecStreamCToken *dst)
+void VecCFile_moveArea(VecCFile *src, size_t src_start, size_t src_size, VecCFile *dst)
 {
 	size_t i;
 
 	for (i = 0; i < src_size; i++)
-		VecStreamCToken_add(dst, src->stream[src_start + i]);
+		VecCFile_add(dst, src->stream[src_start + i]);
 	src->size -= src_size;
 	for (i = src_start; i < src->size; i++)
 		src->stream[i] = src->stream[i + src_size];
 }
 
-void VecStreamCToken_destroy(VecStreamCToken vec)
+void VecCFile_destroy(VecCFile vec)
 {
-	VecStreamCToken_flush(&vec);
+	VecCFile_flush(&vec);
 }
 
 int CStream_create(const char *filepath, CStream **pres)
 {
 	CStream *res;
-	StreamCToken file;
+	CFile file;
 
-	if (!StreamCToken_create(filepath, &file))
+	if (!CFile_create(filepath, &file))
 		return 0;
 	res = (CStream*)malloc(sizeof(CStream));
 	res->vec = VecCToken_init();
 	res->i = 0;
 	res->buf = VecCToken_init();
-	res->streams = VecStreamCToken_init();
-	res->terminatedStreams = VecStreamCToken_init();
-	VecStreamCToken_add(&res->streams, file);
+	res->streams = VecCFile_init();
+	res->terminatedStreams = VecCFile_init();
+	VecCFile_add(&res->streams, file);
 	*pres = res;
 	return 1;
 }
@@ -158,12 +158,12 @@ void CStream_destroy(CStream *stream)
 {
 	VecCToken_destroy(stream->vec);
 	VecCToken_destroy(stream->buf);
-	VecStreamCToken_destroy(stream->streams);
-	VecStreamCToken_destroy(stream->terminatedStreams);
+	VecCFile_destroy(stream->streams);
+	VecCFile_destroy(stream->terminatedStreams);
 	free(stream);
 }
 
-int CStream_currentStream(CStream *stream, StreamCToken **pres)
+int CStream_currentStream(CStream *stream, CFile **pres)
 {
 	if (stream->streams.size == 0)
 		return 0;
@@ -190,7 +190,7 @@ static int parse_macro(CStream *stream, CToken token)
 static int poll_tokens(CStream *stream, VecCToken *pres)
 {
 	VecCToken res = VecCToken_init();
-	StreamCToken *to_poll;
+	CFile *to_poll;
 	CToken cur;
 	int is_err;
 
@@ -199,12 +199,12 @@ static int poll_tokens(CStream *stream, VecCToken *pres)
 			*pres = res;
 			return 1;
 		}
-		if (!StreamCToken_readToken(to_poll, &cur, &is_err)) {
+		if (!CFile_readToken(to_poll, &cur, &is_err)) {
 			if (is_err) {
 				VecCToken_destroy(res);
 				return 0;
 			}
-			VecStreamCToken_move(&stream->streams, stream->streams.size - 1, &stream->terminatedStreams);
+			VecCFile_move(&stream->streams, stream->streams.size - 1, &stream->terminatedStreams);
 		} else {
 			if (cur.type == CTOKEN_MACRO) {
 				if (!parse_macro(stream, cur)) {
@@ -253,7 +253,7 @@ int CStream_nextBatch(CStream *stream)
 	CToken cur;
 	size_t end;
 
-	VecStreamCToken_flush(&stream->terminatedStreams);
+	VecCFile_flush(&stream->terminatedStreams);
 	VecCToken_flush(&stream->vec);
 	stream->i = 0;
 	if (!get_first_ending_token(stream->buf, &end))

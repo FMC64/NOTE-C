@@ -185,12 +185,12 @@ static void CTokenParserState_forward(CTokenParserState *s, size_t off)
 	s->i_file += off;
 }
 
-static int StreamCToken_pollFile(StreamCToken *stream)
+static int CFile_pollFile(CFile *stream)
 {
 	if (stream->isFileDone)
 		return 1;
 	memcpy(stream->buf, &stream->buf[STREAMCTOKEN_BUFSIZE], STREAMCTOKEN_BUFSIZE);
-	if (!StreamCToken_pollFileBytes(stream, STREAMCTOKEN_BUFSIZE, STREAMCTOKEN_BUFSIZE))
+	if (!CFile_pollFileBytes(stream, STREAMCTOKEN_BUFSIZE, STREAMCTOKEN_BUFSIZE))
 		return 0;
 	stream->parserState.i -= STREAMCTOKEN_BUFSIZE;
 	stream->parserState.quote_start = stream->parserState.i;
@@ -306,7 +306,7 @@ VecCToken_from_CTokens_end_error:
 	return 0;
 }
 
-int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
+int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 {
 	CTokenParserState *s = &stream->parserState;
 	CContext ctx;
@@ -320,7 +320,7 @@ int StreamCToken_readToken(StreamCToken *stream, CToken *pres, int *is_err)
 		if (s->i >= STREAMCTOKEN_BUFSIZE) {
 			if (s->is_quote || isMacro)
 				Str_append(&acc, Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]));
-			if (!StreamCToken_pollFile(stream)) {
+			if (!CFile_pollFile(stream)) {
 				if (s->is_quote || isMacro)
 					Str_destroy(acc);
 				*is_err = 1;

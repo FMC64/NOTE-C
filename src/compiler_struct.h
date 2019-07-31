@@ -42,19 +42,19 @@ typedef struct {
 	int isFileDone;
 	char *buf;	// malloc'd to reduce vector size
 	CTokenParserState parserState;
-} StreamCToken;
+} CFile;
 
 typedef struct {
 	size_t size;
-	StreamCToken *stream;
-} VecStreamCToken;
+	CFile *stream;
+} VecCFile;
 
 typedef struct {
 	VecCToken vec;
 	size_t i;
 	VecCToken buf;
-	VecStreamCToken streams;
-	VecStreamCToken terminatedStreams;	// flushed on each token polling pass
+	VecCFile streams;
+	VecCFile terminatedStreams;	// flushed on each token polling pass
 } CStream;
 
 typedef struct {
