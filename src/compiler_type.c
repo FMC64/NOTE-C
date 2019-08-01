@@ -529,8 +529,8 @@ static int poll_function(CScope *scope, int hasPolled, CTypeFull *pres, VecStr *
 		if (CType_primitiveType(type) != CPRIMITIVE_VOID) {
 			CFunction_addArg(pres->primitive.data, type);
 			VecStr_add(&args, name);
-			forceContinue = CStream_pollStr(scope->stream, ",", NULL);
 		}
+		forceContinue = CStream_pollStr(scope->stream, ",", NULL);
 	}
 	if (pargsName != NULL)
 		*pargsName = args;

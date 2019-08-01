@@ -23,6 +23,11 @@ typedef struct {
 } VecCToken;
 
 typedef struct {
+	VecCToken vec;
+	size_t i;
+} StreamCToken;
+
+typedef struct {
 	size_t i;
 	size_t i_file;
 	int is_comment;
@@ -51,8 +56,7 @@ typedef struct {
 } VecCFile;
 
 typedef struct {
-	VecCToken vec;
-	size_t i;
+	StreamCToken tokens;
 	VecCToken buf;
 	VecCFile streams;
 	VecCFile terminatedStreams;	// flushed on each token polling pass

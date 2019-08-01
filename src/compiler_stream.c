@@ -144,8 +144,7 @@ int CStream_create(const char *filepath, CStream **pres)
 	if (!CFile_create(filepath, &file))
 		return 0;
 	res = (CStream*)malloc(sizeof(CStream));
-	res->vec = VecCToken_init();
-	res->i = 0;
+	res->tokens = StreamCToken_init(VecCToken_init());
 	res->buf = VecCToken_init();
 	res->streams = VecCFile_init();
 	res->terminatedStreams = VecCFile_init();
@@ -157,10 +156,11 @@ int CStream_create(const char *filepath, CStream **pres)
 
 void CStream_destroy(CStream *stream)
 {
-	VecCToken_destroy(stream->vec);
+	StreamCToken_destroy(stream->tokens);
 	VecCToken_destroy(stream->buf);
 	VecCFile_destroy(stream->streams);
 	VecCFile_destroy(stream->terminatedStreams);
+	StrSonic_destroy(&stream->macros);
 	free(stream);
 }
 
@@ -244,28 +244,56 @@ int CStream_nextBatch(CStream *stream)
 	size_t end;
 
 	VecCFile_flush(&stream->terminatedStreams);
-	VecCToken_flush(&stream->vec);
-	stream->i = 0;
+	StreamCToken_flush(&stream->tokens);
 	if (!get_first_ending_token(stream->buf, &end))
 		if (!feed_tokens(stream))
 			return 0;
 	if (!get_first_ending_token(stream->buf, &end))
 		end = stream->buf.count - 1;
-	VecCToken_moveArea(&stream->buf, 0, end + 1, &stream->vec);
+	VecCToken_moveArea(&stream->buf, 0, end + 1, &stream->tokens.vec);
 	return 1;
 }
 
 int CStream_isEof(CStream *stream)
 {
-	return stream->vec.count == 0;
+	return stream->tokens.vec.count == 0;
 }
 
-void CStream_begin(CStream *stream)
+StreamCToken StreamCToken_init(VecCToken vec)
+{
+	StreamCToken res;
+
+	res.vec = vec;
+	res.i = 0;
+	return res;
+}
+
+void StreamCToken_flush(StreamCToken *stream)
+{
+	VecCToken_flush(&stream->vec);
+	stream->i = 0;
+}
+
+StreamCToken StreamCToken_offset(StreamCToken *stream)
+{
+	StreamCToken res;
+
+	res.i = 0;
+	res.vec = VecCToken_offset(stream->vec, stream->i);
+	return res;
+}
+
+void StreamCToken_destroy(StreamCToken stream)
+{
+	VecCToken_destroy(stream.vec);
+}
+
+void StreamCToken_begin(StreamCToken *stream)
 {
 	stream->i = 0;
 }
 
-void CStream_end(CStream *stream)
+void StreamCToken_end(StreamCToken *stream)
 {
 	if (stream->vec.count > 0)
 		stream->i = stream->vec.count - 1;
@@ -273,42 +301,42 @@ void CStream_end(CStream *stream)
 		stream->i = 0;
 }
 
-int CStream_forward(CStream *stream)
+int StreamCToken_forward(StreamCToken *stream)
 {
 	stream->i++;
 }
 
-int CStream_back(CStream *stream)
+int StreamCToken_back(StreamCToken *stream)
 {
 	stream->i--;
 }
 
-int CStream_at(CStream *stream, CToken *pres)
+int StreamCToken_at(StreamCToken *stream, CToken *pres)
 {
 	return VecCToken_at(stream->vec, stream->i, pres);
 }
 
-int CStream_poll(CStream *stream, CToken *pres)
+int StreamCToken_poll(StreamCToken *stream, CToken *pres)
 {
 	int res;
 
-	res = CStream_at(stream, pres);
+	res = StreamCToken_at(stream, pres);
 	if (res)
-		CStream_forward(stream);
+		StreamCToken_forward(stream);
 	return res;
 }
 
-int CStream_pollRev(CStream *stream, CToken *pres)
+int StreamCToken_pollRev(StreamCToken *stream, CToken *pres)
 {
 	int res;
 
-	res = CStream_at(stream, pres);
+	res = StreamCToken_at(stream, pres);
 	if (res)
-		CStream_back(stream);
+		StreamCToken_back(stream);
 	return res;
 }
 
-CContext CStream_lastCtx(CStream *stream)
+CContext StreamCToken_lastCtx(StreamCToken *stream)
 {
 	if (stream->vec.count > 0)
 		return stream->vec.token[stream->vec.count - 1].ctx;
@@ -316,38 +344,100 @@ CContext CStream_lastCtx(CStream *stream)
 		return CContext_null();
 }
 
-CContext CStream_atCtx(CStream *stream)
+CContext StreamCToken_atCtx(StreamCToken *stream)
 {
 	if (stream->i < stream->vec.count)
 		return stream->vec.token[stream->i].ctx;
 	else
-		return CStream_lastCtx(stream);
+		return StreamCToken_lastCtx(stream);
 }
 
-int CStream_pollStr(CStream *tokens, const char *str, CContext *ctx)
+int StreamCToken_pollStr(StreamCToken *tokens, const char *str, CContext *ctx)
 {
 	CToken cur;
 	int res;
 
-	if (!CStream_at(tokens, &cur)) {
+	if (!StreamCToken_at(tokens, &cur)) {
 		if (ctx != NULL)
-			*ctx = CStream_lastCtx(tokens);
+			*ctx = StreamCToken_lastCtx(tokens);
 		return 0;
 	}
+	if (cur.type != CTOKEN_BASIC)
+		return 0;
 	if (ctx != NULL)
 		*ctx = cur.ctx;
 	res = streq(cur.str, str);
 	if (res)
-		CStream_forward(tokens);
+		StreamCToken_forward(tokens);
 	return res;
 }
 
-int CStream_pollLpar(CStream *tokens, CContext *ctx)
+int StreamCToken_pollLpar(StreamCToken *tokens, CContext *ctx)
 {
-	return CStream_pollStr(tokens, "(", ctx);
+	return StreamCToken_pollStr(tokens, "(", ctx);
 }
 
-int CStream_pollRpar(CStream *tokens, CContext *ctx)
+int StreamCToken_pollRpar(StreamCToken *tokens, CContext *ctx)
 {
-	return CStream_pollStr(tokens, ")", ctx);
+	return StreamCToken_pollStr(tokens, ")", ctx);
+}
+
+void CStream_begin(CStream *stream)
+{
+	StreamCToken_begin(&stream->tokens);
+}
+
+void CStream_end(CStream *stream)
+{
+	StreamCToken_end(&stream->tokens);
+}
+
+int CStream_forward(CStream *stream)
+{
+	return StreamCToken_forward(&stream->tokens);
+}
+
+int CStream_back(CStream *stream)
+{
+	return StreamCToken_back(&stream->tokens);
+}
+
+int CStream_at(CStream *stream, CToken *pres)
+{
+	return StreamCToken_at(&stream->tokens, pres);
+}
+
+int CStream_poll(CStream *stream, CToken *pres)
+{
+	return StreamCToken_poll(&stream->tokens, pres);
+}
+
+int CStream_pollRev(CStream *stream, CToken *pres)
+{
+	return StreamCToken_pollRev(&stream->tokens, pres);
+}
+
+CContext CStream_lastCtx(CStream *stream)
+{
+	return StreamCToken_lastCtx(&stream->tokens);
+}
+
+CContext CStream_atCtx(CStream *stream)
+{
+	return StreamCToken_atCtx(&stream->tokens);
+}
+
+int CStream_pollStr(CStream *stream, const char *str, CContext *ctx)
+{
+	return StreamCToken_pollStr(&stream->tokens, str, ctx);
+}
+
+int CStream_pollLpar(CStream *stream, CContext *ctx)
+{
+	return StreamCToken_pollLpar(&stream->tokens, ctx);
+}
+
+int CStream_pollRpar(CStream *stream, CContext *ctx)
+{
+	return StreamCToken_pollRpar(&stream->tokens, ctx);
 }

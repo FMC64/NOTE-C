@@ -1,15 +1,53 @@
 
 #include "headers.h"
 
+static int define_get_args(StreamCToken *stream, VecStr *pres)
+{
+	VecStr res = VecStr_init();
+	CToken cur;
+	int forceContinue = 0;
+
+	if (!StreamCToken_pollStr(stream, "(", NULL))
+		return 0;
+	while ((!StreamCToken_pollStr(stream, ")", NULL)) || forceContinue) {
+		if (!StreamCToken_poll(stream, &cur)) {
+			VecStr_destroy(res);
+			return 0;
+		}
+		if (!CToken_isIdentifier(cur)) {
+			VecStr_destroy(res);
+			return 0;
+		}
+		VecStr_add(&res, cur.str);
+		forceContinue = StreamCToken_pollStr(stream, ",", NULL);
+	}
+	*pres = res;
+	return 1;
+}
+
+static void* CMacro_create(VecStr args, VecCToken tokens)
+{
+	return NULL;
+}
+
 static int preproc_define(CStream *stream, VecCToken tokens, CContext ctx)
 {
-	CToken cur;
+	CToken name;
+	StreamCToken s = StreamCToken_init(tokens);
+	VecStr args = VecStr_init();
 
-	if (!VecCToken_at(tokens, 0, &cur)) {
+	if (!StreamCToken_poll(&s, &name)) {
 		printf_error(ctx, "expected a name for macro definition");
 		return 0;
 	}
-	VecCToken_print(tokens);
+	if (!CToken_isIdentifier(name)) {
+		printf_error(name.ctx, "expected a valid identifier for macro name");
+		return 0;
+	}
+	if (!define_get_args(&s, &args))
+		s = StreamCToken_init(tokens);
+	StrSonic_add(&stream->macros, name.str, 0, CMacro_create(args, StreamCToken_offset(&s).vec));
+	free(args.str);
 	return 1;
 }
 

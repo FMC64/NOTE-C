@@ -35,11 +35,11 @@ void CContext_print(CContext ctx)
 
 CContext CContext_polled(CStream *stream)
 {
-	size_t i = stream->i;
+	size_t i = stream->tokens.i;
 
 	if (i > 0) {
 		i--;
-		return stream->vec.token[i].ctx;
+		return stream->tokens.vec.token[i].ctx;
 	} else
 		return CContext_null();
 }
