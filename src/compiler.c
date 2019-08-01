@@ -11,9 +11,14 @@ CToken CToken_init(CTokenType type, const char *str, CContext ctx)
 	return res;
 }
 
+int CTokenType_isString(CTokenType type)
+{
+	return (type >= CTOKEN_STRING_SIMPLE) && (type <= CTOKEN_STRING_CHEVRON);
+}
+
 int CToken_isString(CToken token)
 {
-	return (token.type >= CTOKEN_STRING_SIMPLE) && (token.type <= CTOKEN_STRING_CHEVRON);
+	return CTokenType_isString(token.type);
 }
 
 void CToken_destroy(CToken token)
@@ -41,22 +46,6 @@ void VecCToken_add(VecCToken *vec, CToken to_add)
 	}
 	vec->token[cur] = to_add;
 }
-
-static void print_token_string(CToken token)
-{
-	Str s = Str_init_from_CToken(token);
-	size_t i;
-
-	printf("'");
-	for (i = 0; i < s.size; i++) {
-		if (s.data[i] == 0)
-			printf("\\0");
-		else
-			printf("%c", s.data[i]);
-	}
-	printf("' ");
-}
-
 void VecCToken_print(VecCToken vec)
 {
 	size_t i;
@@ -65,9 +54,11 @@ void VecCToken_print(VecCToken vec)
 
 	printf("Tokens: (%u)\n", vec.count);
 	for (i = 0; i < vec.count; i++) {
-		if (CToken_isString(vec.token[i]))
-			print_token_string(vec.token[i]);
-		else
+		if (CToken_isString(vec.token[i])) {
+			printf("'");
+			Str_print(Str_init_from_CToken(vec.token[i]));
+			printf("' ");
+		} else
 			printf("'%s' ", vec.token[i].str);
 	}
 

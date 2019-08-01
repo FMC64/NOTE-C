@@ -451,21 +451,17 @@ static size_t poll_reference_level(CStream *tokens)
 static int poll_reference(CStream *tokens, char **pname, CReference *acc)
 {
 	CToken cur;
-	char *err_msg = "expected name for declaration";
-	//char *err_msg_fun = "expected name for function declaration";
 
 	if (pname != NULL)
 		*pname = NULL;
 	acc->level += poll_reference_level(tokens);
-	if (!CStream_poll(tokens, &cur))
-		return;
-	if (pname != NULL) {
-		if (str_is_identifier(cur.str))
-			*pname = cur.str;
-		else
-			CStream_back(tokens);
-	} else
-		CStream_back(tokens);
+	if (pname != NULL)
+		if (CStream_poll(tokens, &cur)) {
+			if (str_is_identifier(cur.str))
+				*pname = strdup(cur.str);
+			else
+				CStream_back(tokens);
+		}
 	return 1;
 }
 
@@ -532,7 +528,7 @@ static int poll_function(CScope *scope, int hasPolled, CTypeFull *pres, VecStr *
 		}
 		if (CType_primitiveType(type) != CPRIMITIVE_VOID) {
 			CFunction_addArg(pres->primitive.data, type);
-			VecStr_add(&args, name != NULL ? strdup(name) : name);
+			VecStr_add(&args, name);
 			forceContinue = CStream_pollStr(scope->stream, ",", NULL);
 		}
 	}
@@ -567,14 +563,10 @@ int CVariable_parse(CScope *scope, CVariable **pres, VecStr *pargs)
 	CVariable *res = CVariable_alloc(CVariable_default());
 	char *name;
 
-	if (!CTypeFull_parse(scope, &name, &res->type.full, &res->storage, pargs)) {
+	if (!CTypeFull_parse(scope, &res->name, &res->type.full, &res->storage, pargs)) {
 		CVariable_destroy(res);
 		return 0;
 	}
-	if (name != NULL)
-		res->name = strdup(name);
-	else
-		res->name = NULL;
 	*pres = res;
 	return 1;
 }
@@ -701,7 +693,10 @@ int CType_parse(CScope *scope, CType *pres)
 {
 	char *name;
 
-	return CType_parseFull(scope, &name, pres, NULL, NULL);
+	if (!CType_parseFull(scope, &name, pres, NULL, NULL))
+		return 0;
+	free(name);
+	return 1;
 }
 
 static void print_tabs(size_t count)

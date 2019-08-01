@@ -17,6 +17,7 @@ void Str_prepend(Str *str, const Str to_pre);
 void Str_remove(Str *str, size_t start, size_t size);
 int Str_char_escape(Str str, size_t *i, char *pres, CContext ctx);
 int Str_escape(Str str, Str *pres, CContext ctx);
+void Str_print(Str str);
 void Str_destroy(Str str);
 
 char* string_create_from_Str(Str str);

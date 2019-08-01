@@ -220,6 +220,18 @@ int Str_escape(Str str, Str *pres, CContext ctx)
 	return 1;
 }
 
+void Str_print(Str str)
+{
+	size_t i;
+
+	for (i = 0; i < str.size; i++) {
+		if (str.data[i] == 0)
+			printf("\\0");
+		else
+			printf("%c", str.data[i]);
+	}
+}
+
 void Str_destroy(Str str)
 {
 	free(str.data);
