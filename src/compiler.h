@@ -2,6 +2,7 @@
 #pragma once
 
 CToken CToken_init(CTokenType type, const char *str, CContext ctx);
+int CToken_isString(CToken token);
 void CToken_destroy(CToken token);
 
 VecCToken VecCToken_init(void);

@@ -80,6 +80,11 @@ Str Str_init_from_string(const char *src)
 	return Str_init(strlen(src), src);
 }
 
+Str Str_init_from_CToken(CToken token)
+{
+	return Str_init(*(size_t*)token.str, token.str + sizeof(size_t));
+}
+
 // Data is copied
 Str Str_create(size_t size, const char *data)
 {
@@ -106,6 +111,22 @@ void Str_append(Str *str, const Str to_add)
 	return;
 }
 
+void Str_prepend(Str *str, const Str to_pre)
+{
+	size_t new_size = str->size + to_pre.size;
+	size_t i;
+	size_t i_rev;
+
+	str->data = (char*)realloc(str->data, new_size * sizeof(char));
+	for (i = 0; i < str->size; i++) {
+		i_rev = str->size - i - 1;
+		str->data[i_rev + to_pre.size] = str->data[i_rev];
+	}
+	memcpy(str->data, to_pre.data, to_pre.size * sizeof(char));
+	str->size = new_size;
+	return;
+}
+
 void Str_remove(Str *str, size_t start, size_t size)
 {
 	size_t i;
@@ -125,15 +146,16 @@ Str Str_dup(Str str)
 
 int Str_char_escape(Str str, size_t *i, char *pres, CContext ctx)
 {
+	CContext ctx_cur = ctx;
+
 	if (str.data[*i] == '\\') {
 		(*i)++;
+		ctx_cur.colon += *i;
 		if ((*i) >= str.size) {
-			terminal_flush();
-			CContext_print(ctx);
-			printf("Escaping sequence with no control character.\n");
-			terminal_show();
+			printf_error(ctx_cur, "Escaping sequence with no control character.\n");
 			return 0;
 		}
+		ctx_cur.colon++;
 		switch (str.data[(*i)++]) {
 		case 'a':
 			*pres = 0x07;
@@ -170,12 +192,12 @@ int Str_char_escape(Str str, size_t *i, char *pres, CContext ctx)
 		case '\?':
 			*pres = 0x3F;
 			break;
-		default:
-			terminal_flush();
-			CContext_print(ctx);
-			printf("Unrecognized escaping character: '%c'.\n", str.data[(*i) - 1]);
-			terminal_show();
+		case '0':
+			*pres = 0x00;
 			break;
+		default:
+			printf_error(ctx_cur, "Unrecognized escaping character: '%c'.\n", str.data[(*i) - 1]);
+			return 0;
 		}
 	} else
 		*pres = str.data[(*i)++];

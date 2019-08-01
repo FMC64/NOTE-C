@@ -11,6 +11,11 @@ CToken CToken_init(CTokenType type, const char *str, CContext ctx)
 	return res;
 }
 
+int CToken_isString(CToken token)
+{
+	return (token.type >= CTOKEN_STRING_SIMPLE) && (token.type <= CTOKEN_STRING_CHEVRON);
+}
+
 void CToken_destroy(CToken token)
 {
 	free(token.str);
@@ -37,6 +42,21 @@ void VecCToken_add(VecCToken *vec, CToken to_add)
 	vec->token[cur] = to_add;
 }
 
+static void print_token_string(CToken token)
+{
+	Str s = Str_init_from_CToken(token);
+	size_t i;
+
+	printf("'");
+	for (i = 0; i < s.size; i++) {
+		if (s.data[i] == 0)
+			printf("\\0");
+		else
+			printf("%c", s.data[i]);
+	}
+	printf("' ");
+}
+
 void VecCToken_print(VecCToken vec)
 {
 	size_t i;
@@ -44,8 +64,12 @@ void VecCToken_print(VecCToken vec)
 	terminal_flush();
 
 	printf("Tokens: (%u)\n", vec.count);
-	for (i = 0; i < vec.count; i++)
-		printf("'%s' ", vec.token[i].str);
+	for (i = 0; i < vec.count; i++) {
+		if (CToken_isString(vec.token[i]))
+			print_token_string(vec.token[i]);
+		else
+			printf("'%s' ", vec.token[i].str);
+	}
 
 	terminal_show();
 }
@@ -175,6 +199,7 @@ static int get_escaped_string(Str str, char **pres, size_t *res_size, CContext c
 	if (!Str_escape(str, &str, ctx))
 		return 0;
 	*res_size = str.size;
+	Str_prepend(&str, Str_init(sizeof(size_t), (char*)res_size));
 	*pres = Str_to_string(str);
 	return 1;
 }
@@ -205,6 +230,21 @@ static char *op[] = {"->", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^|
 "(", ")", "[", "]", "{", "}", "?", ":", ";", ",", NULL};
 static char *op_macro[] = {"##", NULL};
 
+static CTokenType get_string_type(char source)
+{
+	switch (source) {
+	case '\'':
+		return CTOKEN_STRING_SIMPLE;
+	case '"':
+		return CTOKEN_STRING_DOUBLE;
+	case '<':
+	case '>':
+		return CTOKEN_STRING_CHEVRON;
+	default:
+		return CTOKEN_NONE;
+	}
+}
+
 int VecCToken_from_CToken(const CToken src, VecCToken *pres)
 {
 	VecCToken res = VecCToken_init();
@@ -231,27 +271,27 @@ int VecCToken_from_CToken(const CToken src, VecCToken *pres)
 			i++;
 			continue;
 		}
-		if ((str[i] == '"') || (str[i] == '\'')) {
+		if ((str[i] == '"') || (str[i] == '\'') || (str[i] == '<') || (str[i] == '>')) {
 			if (!is_quote)
-				quote_char = str[i];
+				quote_char = str[i] == '<' ? '>' : str[i];
 			if ((!is_quote) || (str[i] == quote_char)) {
 				if (is_quote) {
 					i++;
-					if (!get_escaped_string(Str_init(i - quote_start - 1, &str[quote_start]), &found, &esc_size, ctx))
+					if (!get_escaped_string(Str_init(i - quote_start - 1, &str[quote_start]), &found, &esc_size, quote_start_ctx))
 						goto VecCToken_from_CTokens_end_error;
 					if (quote_char == '\'') {
 						if (esc_size > 1) {
-							printf_error(ctx, "only one character can fit in this. you tried to stuff %u instead.", esc_size);
+							printf_error(quote_start_ctx, "only one character can fit in this. you tried to stuff %u instead.", esc_size);
 							free(found);
 							goto VecCToken_from_CTokens_end_error;
 						}
 						if (esc_size == 0) {
-							printf_error(ctx, "you forgot to put a character there !");
+							printf_error(quote_start_ctx, "you forgot to put a character there !");
 							free(found);
 							goto VecCToken_from_CTokens_end_error;
 						}
 					}
-					VecCToken_add(&res, CToken_init(quote_char == '"' ? CTOKEN_STRING_DOUBLE : CTOKEN_STRING_SIMPLE, found, ctx));
+					VecCToken_add(&res, CToken_init(get_string_type(quote_char), found, quote_start_ctx));
 				} else {
 					quote_start = i + 1;
 					quote_start_ctx = ctx;
@@ -276,12 +316,12 @@ int VecCToken_from_CToken(const CToken src, VecCToken *pres)
 			continue;
 		}
 		if (streq_part_in_arr(&str[i], op, &found)) {
-			VecCToken_add(&res, CToken_init(CTOKEN_OPERATOR, string_create_from_Str(Str_init_from_string(found)), ctx));
+			VecCToken_add(&res, CToken_init(CTOKEN_IDENTIFIER, string_create_from_Str(Str_init_from_string(found)), ctx));
 			i += strlen(found);
 			continue;
 		}
 		if (streq_part_in_arr(&str[i], op_macro, &found)) {
-			VecCToken_add(&res, CToken_init(CTOKEN_OPERATOR, string_create_from_Str(Str_init_from_string(found)), ctx));
+			VecCToken_add(&res, CToken_init(CTOKEN_IDENTIFIER, string_create_from_Str(Str_init_from_string(found)), ctx));
 			i += strlen(found);
 			continue;
 		}
@@ -364,7 +404,7 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 				if (s->is_quote) {
 					CTokenParserState_forward(s, 1);
 					Str_append(&acc, Str_init(s->i - s->quote_start - 1, &stream->buf[s->quote_start]));
-					if (!get_escaped_string(acc, &found, &esc_size, ctx)) {
+					if (!get_escaped_string(acc, &found, &esc_size, s->quote_start_ctx)) {
 						Str_destroy(acc);
 						*is_err = 1;
 						return 0;
@@ -372,19 +412,19 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 					Str_destroy(acc);
 					if (s->quote_char == '\'') {
 						if (esc_size > 1) {
-							printf_error(ctx, "only one character can fit in this. you tried to stuff %u instead.", esc_size);
+							printf_error(s->quote_start_ctx, "only one character can fit in this. you tried to stuff %u instead.", esc_size);
 							free(found);
 							*is_err = 1;
 							return 0;
 						}
 						if (esc_size == 0) {
-							printf_error(ctx, "you forgot to put a character there !");
+							printf_error(s->quote_start_ctx, "you forgot to put a character there !");
 							free(found);
 							*is_err = 1;
 							return 0;
 						}
 					}
-					*pres = CToken_init(s->quote_char == '"' ? CTOKEN_STRING_DOUBLE : CTOKEN_STRING_SIMPLE, found, s->quote_start_ctx);
+					*pres = CToken_init(get_string_type(s->quote_char), found, s->quote_start_ctx);
 				} else {
 					s->quote_start = s->i + 1;
 					acc = Str_empty();
@@ -422,7 +462,7 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 			continue;
 		}
 		if (streq_part_in_arr(&stream->buf[s->i], op, &found)) {
-			*pres = CToken_init(CTOKEN_OPERATOR, string_create_from_Str(Str_init_from_string(found)), ctx);
+			*pres = CToken_init(CTOKEN_IDENTIFIER, string_create_from_Str(Str_init_from_string(found)), ctx);
 			CTokenParserState_forward(s, strlen(found));
 			return 1;
 		}
