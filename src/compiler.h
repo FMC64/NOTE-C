@@ -4,6 +4,7 @@
 CToken CToken_init(CTokenType type, const char *str, CContext ctx);
 int CTokenType_isString(CTokenType type);
 int CToken_isString(CToken token);
+size_t CToken_stringSize(CToken token);
 int CToken_isIdentifier(CToken token);
 void CToken_destroy(CToken token);
 
@@ -147,3 +148,10 @@ void CStream_macro_quit(void);
 int CStream_parseMacro(CStream *stream, CToken macro);
 int CStream_canAddToken(CStream *stream);
 void StrSonic_CMacro_destroy(unsigned char type, void *data);
+
+void* CMacro_create(VecStr args, VecCToken tokens);
+int CMacro_nextArgument(CMacro *macro, char **pres);
+int CMacro_nextToken(CMacro *macro, CToken *pres);
+void CMacro_rewindArguments(CMacro *macro);
+void CMacro_rewindTokens(CMacro *macro);
+CMacro CMacro_dump(void *src);

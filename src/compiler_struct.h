@@ -221,3 +221,11 @@ typedef struct {
 	size_t argCount;
 	CType *arg;
 } CFunction;
+
+typedef struct {
+	size_t argumentCount;
+	char *argumentBase;
+	char *argumentCur;
+	char *tokenBase;
+	char *tokenCur;
+} CMacro;

@@ -21,6 +21,11 @@ int CToken_isString(CToken token)
 	return CTokenType_isString(token.type);
 }
 
+size_t CToken_stringSize(CToken token)
+{
+	return sizeof(size_t) + *(size_t*)token.str;
+}
+
 int CToken_isIdentifier(CToken token)
 {
 	if (token.type != CTOKEN_BASIC)
@@ -116,8 +121,8 @@ VecCToken VecCToken_offset(VecCToken vec, size_t off)
 {
 	VecCToken res = vec;
 
-	res.count--;
-	res.allocated--;
+	res.count -= off;
+	res.allocated -= off;
 	res.token = &res.token[off];
 	return res;
 }

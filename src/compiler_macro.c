@@ -25,9 +25,140 @@ static int define_get_args(StreamCToken *stream, VecStr *pres)
 	return 1;
 }
 
-static void* CMacro_create(VecStr args, VecCToken tokens)
+static size_t get_token_size(CToken token)
 {
-	return NULL;
+	if (CToken_isString(token))
+		return 1 + CToken_stringSize(token);
+	else
+		return 1 + strlen(token.str) + 1;
+}
+
+static size_t get_macro_size(VecStr args, VecCToken tokens)
+{
+	size_t res = 2;	// end bytes for array
+	size_t i;
+
+	for (i = 0; i < args.count; i++)
+		res += 1 + strlen(args.str[i]) + 1;	// announce byte + end byte
+	for (i = 0; i < tokens.count; i++)
+		res += 1 + get_token_size(tokens.token[i]);	// announce byte
+	return res;
+}
+
+static void write_token(void *buf, size_t *i, CToken to_write)
+{
+	size_t size;
+
+	((char*)buf)[(*i)++] = to_write.type;
+	if (CToken_isString(to_write)) {
+		size = CToken_stringSize(to_write);
+		memcpy(ptr_add(buf, *i), to_write.str, size);
+		*i += size;
+	} else {
+		strcpy(ptr_add(buf, *i), to_write.str);
+		*i += strlen(to_write.str) + 1;
+	}
+}
+
+static CMacro_print(void *data)
+{
+	CMacro macro = CMacro_dump(data);
+	char *cur_str;
+	CToken cur_token;
+
+	terminal_flush();
+
+	printf("args: ");
+	while (CMacro_nextArgument(&macro, &cur_str))
+		printf("'%s' ", cur_str);
+	printf("\ntokens: ");
+	while (CMacro_nextToken(&macro, &cur_token)) {
+		if (CToken_isString(cur_token)) {
+			printf("'");
+			Str_print(Str_init_from_CToken(cur_token));
+			printf("' ");
+		} else
+			printf("'%s' ", cur_token.str);
+	}
+	terminal_show();
+}
+
+void* CMacro_create(VecStr args, VecCToken tokens)
+{
+	size_t size = get_macro_size(args, tokens);
+	void *res = malloc(size);
+	size_t i = 0;
+	size_t j;
+
+	for (j = 0; j < args.count; j++) {
+		((char*)res)[i++] = 1;
+		strcpy(ptr_add(res, i), args.str[j]);
+		i += strlen(args.str[j]) + 1;
+	}
+	((char*)res)[i++] = 0;	// null byte on array end
+	for (j = 0; j < tokens.count; j++) {
+		((char*)res)[i++] = 1;
+		write_token(res, &i, tokens.token[j]);
+	}
+	((char*)res)[i++] = 0;	// null byte on array end
+	return res;
+}
+
+int CMacro_nextArgument(CMacro *macro, char **pres)
+{
+	char *res;
+	size_t len;
+
+	if (*macro->argumentCur == 0)
+		return 0;
+	macro->argumentCur++;
+	res = macro->argumentCur;
+	macro->argumentCur += strlen(macro->argumentCur) + 1;
+	if (pres != NULL)
+		*pres = res;
+	return 1;
+}
+
+int CMacro_nextToken(CMacro *macro, CToken *pres)
+{
+	CToken res;
+	CTokenType type;
+	size_t len;
+
+	if (*macro->tokenCur == 0)
+		return 0;
+	macro->tokenCur++;
+	type = *(char*)macro->tokenCur;
+	res = CToken_init(type, macro->tokenCur + 1, CContext_null());
+	macro->tokenCur += get_token_size(res);
+	if (pres != NULL)
+		*pres = res;
+	return 1;
+}
+
+void CMacro_rewindArguments(CMacro *macro)
+{
+	macro->argumentCur = macro->argumentBase;
+}
+
+void CMacro_rewindTokens(CMacro *macro)
+{
+	macro->tokenCur = macro->tokenBase;
+}
+
+CMacro CMacro_dump(void *src)
+{
+	CMacro res;
+
+	res.argumentCount = 0;
+	res.argumentBase = src;
+	CMacro_rewindArguments(&res);
+	while (CMacro_nextArgument(&res, NULL))
+		res.argumentCount++;
+	res.tokenBase = res.argumentCur + 1;
+	CMacro_rewindArguments(&res);
+	CMacro_rewindTokens(&res);
+	return res;
 }
 
 static int preproc_define(CStream *stream, VecCToken tokens, CContext ctx)
