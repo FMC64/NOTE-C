@@ -46,11 +46,14 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 {
 	if (setjmp(main_end) == 0) {
 		malloc_unified_init();
+		if (!CScope_keywords_init())
+			return 1;
 
 		//memcheck_test_fragmenting();
 		CCompiler("\\\\crd0\\TEST.c");
 		//CCompiler("\\\\fls0\\TEST.c");
 
+		CScope_keywords_quit();
 		#ifdef MEMCHECK
 		memcheck_recap();
 		#endif

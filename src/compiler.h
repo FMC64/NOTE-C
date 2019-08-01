@@ -58,6 +58,8 @@ int char_is_identifier(char to_test);
 int str_is_identifier(const char *str);
 
 
+int CScope_keywords_init(void);
+void CScope_keywords_quit(void);
 int CScope_create(const char *filepath, CScope **pres);
 void CScope_addBlock(CScope *scope, CBlock to_add);
 int CScope_removeBlock(CScope *scope, CContext ctx);

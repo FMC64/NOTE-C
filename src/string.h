@@ -32,7 +32,9 @@ void VecStr_destroy(VecStr vec);
 
 StrSonic StrSonic_init(void (*elem_destroy_cb)(unsigned char, void*));
 int StrSonic_add(StrSonic *sonic, const char *key, unsigned char type, void *data);
+int StrSonic_addCSymbol(StrSonic *sonic, const char *key, CSymbol to_add);
 void StrSonic_print(StrSonic sonic);
-void* StrSonic_resolve(StrSonic *sonic, const char *key, unsigned char *type);
+int StrSonic_resolve(StrSonic *sonic, const char *key, unsigned char *type, void **data);
+int StrSonic_resolveCSymbol(StrSonic *sonic, const char *key, CSymbol *pres);
 void StrSonic_destroy_elem(StrSonic *sonic, const char *key);
 void StrSonic_destroy(StrSonic *sonic);

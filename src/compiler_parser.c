@@ -55,6 +55,60 @@ static void CTypeFullCached_destroy(CTypeFullCached cached)
 	VecCTypeFull_destroy(cached.t_float);
 }
 
+static const struct {const char *key; CKeyword keyword;} str_keyword[] = {
+{"auto", CKEYWORD_AUTO},
+{"break", CKEYWORD_BREAK},
+{"case", CKEYWORD_CASE},
+{"char", CKEYWORD_CHAR},
+{"const", CKEYWORD_CONST},
+{"continue", CKEYWORD_CONTINUE},
+{"default", CKEYWORD_DEFAULT},
+{"do", CKEYWORD_DO},
+{"double", CKEYWORD_DOUBLE},
+{"else", CKEYWORD_ELSE},
+{"enum", CKEYWORD_ENUM},
+{"extern", CKEYWORD_EXTERN},
+{"float", CKEYWORD_FLOAT},
+{"for", CKEYWORD_FOR},
+{"goto", CKEYWORD_GOTO},
+{"if", CKEYWORD_IF},
+{"inline", CKEYWORD_INLINE},
+{"int", CKEYWORD_INT},
+{"long", CKEYWORD_LONG},
+{"register", CKEYWORD_REGISTER},
+{"return", CKEYWORD_RETURN},
+{"short", CKEYWORD_SHORT},
+{"signed", CKEYWORD_SIGNED},
+{"sizeof", CKEYWORD_SIZEOF},
+{"static", CKEYWORD_STATIC},
+{"struct", CKEYWORD_STRUCT},
+{"switch", CKEYWORD_SWITCH},
+{"typedef", CKEYWORD_TYPEDEF},
+{"union", CKEYWORD_UNION},
+{"unsigned", CKEYWORD_UNSIGNED},
+{"void", CKEYWORD_VOID},
+{"volatile", CKEYWORD_VOLATILE},
+{"while", CKEYWORD_WHILE},
+{NULL, CKEYWORD_NONE}};
+
+static StrSonic keywords;
+
+int CScope_keywords_init(void)
+{
+	size_t i;
+
+	keywords = StrSonic_init(&StrSonic_CSymbol_destroy);
+	for (i = 0; str_keyword[i].key != NULL; i++)
+		if (!StrSonic_addCSymbol(&keywords, str_keyword[i].key, CKeyword_create(str_keyword[i].keyword)))
+			return 0;
+	return 1;
+}
+
+void CScope_keywords_quit(void)
+{
+	StrSonic_destroy(&keywords);
+}
+
 int CScope_create(const char *filepath, CScope **pres)
 {
 	CScope *res = (CScope*)malloc(sizeof(CScope));
@@ -119,18 +173,15 @@ int CScope_addSymbol(CScope *scope, const char *key, CSymbol to_add, CContext ct
 
 int CScope_resolve(CScope *scope, const char *key, CSymbol *pres)
 {
-	unsigned char type;
-	void *data;
 	size_t i;
 	size_t i_rev;
 
+	if (StrSonic_resolveCSymbol(&keywords, key, pres))
+		return 1;
 	for (i = 0; i < scope->blockCount; i++) {
 		i_rev = scope->blockCount - 1 - i;
-		data = StrSonic_resolve(&scope->block[i_rev].symbols, key, &type);
-		if (data != NULL) {
-			*pres = CSymbol_init(type, data);
+		if (StrSonic_resolveCSymbol(&scope->block[i_rev].symbols, key, pres))
 			return 1;
-		}
 	}
 	return 0;
 }
@@ -188,42 +239,6 @@ CSymbol CKeyword_create(CKeyword keyword)
 	return CSymbol_init(CSYMBOL_KEYWORD, (void*)keyword);
 }
 
-static const struct {const char *key; CKeyword keyword;} str_keyword[] = {
-{"auto", CKEYWORD_AUTO},
-{"break", CKEYWORD_BREAK},
-{"case", CKEYWORD_CASE},
-{"char", CKEYWORD_CHAR},
-{"const", CKEYWORD_CONST},
-{"continue", CKEYWORD_CONTINUE},
-{"default", CKEYWORD_DEFAULT},
-{"do", CKEYWORD_DO},
-{"double", CKEYWORD_DOUBLE},
-{"else", CKEYWORD_ELSE},
-{"enum", CKEYWORD_ENUM},
-{"extern", CKEYWORD_EXTERN},
-{"float", CKEYWORD_FLOAT},
-{"for", CKEYWORD_FOR},
-{"goto", CKEYWORD_GOTO},
-{"if", CKEYWORD_IF},
-{"inline", CKEYWORD_INLINE},
-{"int", CKEYWORD_INT},
-{"long", CKEYWORD_LONG},
-{"register", CKEYWORD_REGISTER},
-{"return", CKEYWORD_RETURN},
-{"short", CKEYWORD_SHORT},
-{"signed", CKEYWORD_SIGNED},
-{"sizeof", CKEYWORD_SIZEOF},
-{"static", CKEYWORD_STATIC},
-{"struct", CKEYWORD_STRUCT},
-{"switch", CKEYWORD_SWITCH},
-{"typedef", CKEYWORD_TYPEDEF},
-{"union", CKEYWORD_UNION},
-{"unsigned", CKEYWORD_UNSIGNED},
-{"void", CKEYWORD_VOID},
-{"volatile", CKEYWORD_VOLATILE},
-{"while", CKEYWORD_WHILE},
-{NULL, CKEYWORD_NONE}};
-
 const char* CKeyword_str(CKeyword keyword)
 {
 	size_t i;
@@ -236,17 +251,6 @@ const char* CKeyword_str(CKeyword keyword)
 
 void CKeyword_destroy(void *data)
 {
-}
-
-static int populate_keywords(CScope *scope)
-{
-
-	size_t i;
-
-	for (i = 0; str_keyword[i].key != NULL; i++)
-		if (!CScope_addSymbol(scope, str_keyword[i].key, CKeyword_create(str_keyword[i].keyword), CContext_null()))
-			return 0;
-	return 1;
 }
 
 CParser CParser_init(char *source_path)
@@ -285,10 +289,6 @@ int CParser_exec(const char *path)
 	CType type;
 
 	if (!CScope_create(path, &scope)) {
-		CScope_destroy(scope);
-		return 0;
-	}
-	if (!populate_keywords(scope)) {
 		CScope_destroy(scope);
 		return 0;
 	}

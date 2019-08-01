@@ -219,6 +219,11 @@ int StrSonic_add(StrSonic *sonic, const char *key, unsigned char type, void *dat
 	}
 }
 
+int StrSonic_addCSymbol(StrSonic *sonic, const char *key, CSymbol to_add)
+{
+	return StrSonic_add(sonic, key, to_add.type, to_add.data);
+}
+
 static void StrSonicNode_print_iter(void *node, size_t depth)
 {
 	StrSonicNode snode = StrSonicNode_dump(&node);
@@ -272,16 +277,28 @@ static int StrSonic_resolveNode(StrSonic *sonic, const char *key, void ***pres)
 	}
 }
 
-void* StrSonic_resolve(StrSonic *sonic, const char *key, unsigned char *type)
+int StrSonic_resolve(StrSonic *sonic, const char *key, unsigned char *type, void **data)
 {
 	void **pnode;
 	StrSonicNode snode;
 
 	if (!StrSonic_resolveNode(sonic, key, &pnode))
-		return NULL;
+		return 0;
 	snode = StrSonicNode_dump(pnode);
 	*type = snode.type;
-	return snode.data;
+	*data = snode.data;
+	return 1;
+}
+
+int StrSonic_resolveCSymbol(StrSonic *sonic, const char *key, CSymbol *pres)
+{
+	unsigned char type;
+	void *data;
+
+	if (!StrSonic_resolve(sonic, key, &type, &data))
+		return 0;
+	*pres = CSymbol_init(type, data);
+	return 1;
 }
 
 static void destroy_node_elem(StrSonic *sonic, void **pnode)
