@@ -3,7 +3,7 @@
 
 typedef enum {
 	CTOKEN_NONE,
-	CTOKEN_IDENTIFIER,
+	CTOKEN_BASIC,
 	CTOKEN_STRING_SIMPLE,
 	CTOKEN_STRING_DOUBLE,
 	CTOKEN_STRING_CHEVRON,
@@ -56,6 +56,7 @@ typedef struct {
 	VecCToken buf;
 	VecCFile streams;
 	VecCFile terminatedStreams;	// flushed on each token polling pass
+	StrSonic macros;
 } CStream;
 
 typedef struct {

@@ -149,6 +149,7 @@ int CStream_create(const char *filepath, CStream **pres)
 	res->buf = VecCToken_init();
 	res->streams = VecCFile_init();
 	res->terminatedStreams = VecCFile_init();
+	res->macros = StrSonic_init(&StrSonic_CMacro_destroy);
 	VecCFile_add(&res->streams, file);
 	*pres = res;
 	return 1;
@@ -196,13 +197,13 @@ static int poll_tokens(CStream *stream, VecCToken *pres)
 			VecCFile_move(&stream->streams, stream->streams.size - 1, &stream->terminatedStreams);
 		} else {
 			if (cur.type == CTOKEN_MACRO) {
-				if (!CMacro_parse(stream, cur)) {
+				if (!CStream_parseMacro(stream, cur)) {
 					CToken_destroy(cur);
 					VecCToken_destroy(res);
 					return 0;
 				}
 				CToken_destroy(cur);
-			} else if (CMacro_canAddToken(stream)){
+			} else if (CStream_canAddToken(stream)){
 				VecCToken_add(&res, cur);
 				if (is_token_end_batch(cur))
 					break;

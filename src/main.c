@@ -48,14 +48,14 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 		malloc_unified_init();
 		if (!CScope_keywords_init())
 			return 0;
-		if (!CMacro_init())
+		if (!CStream_macro_init())
 			return 0;
 
 		//memcheck_test_fragmenting();
 		CCompiler("\\\\crd0\\TEST.c");
 		//CCompiler("\\\\fls0\\TEST.c");
 
-		CMacro_quit();
+		CStream_macro_quit();
 		CScope_keywords_quit();
 		#ifdef MEMCHECK
 		memcheck_recap();

@@ -21,6 +21,13 @@ int CToken_isString(CToken token)
 	return CTokenType_isString(token.type);
 }
 
+int CToken_isIdentifier(CToken token)
+{
+	if (token.type != CTOKEN_BASIC)
+		return 0;
+	return str_is_identifier(token.str);
+}
+
 void CToken_destroy(CToken token)
 {
 	free(token.str);
@@ -109,6 +116,8 @@ VecCToken VecCToken_offset(VecCToken vec, size_t off)
 {
 	VecCToken res = vec;
 
+	res.count--;
+	res.allocated--;
 	res.token = &res.token[off];
 	return res;
 }
@@ -316,12 +325,12 @@ int VecCToken_from_CToken(const CToken src, VecCToken *pres)
 			continue;
 		}
 		if (streq_part_in_arr(&str[i], op, &found)) {
-			VecCToken_add(&res, CToken_init(CTOKEN_IDENTIFIER, string_create_from_Str(Str_init_from_string(found)), ctx));
+			VecCToken_add(&res, CToken_init(CTOKEN_BASIC, string_create_from_Str(Str_init_from_string(found)), ctx));
 			i += strlen(found);
 			continue;
 		}
 		if (streq_part_in_arr(&str[i], op_macro, &found)) {
-			VecCToken_add(&res, CToken_init(CTOKEN_IDENTIFIER, string_create_from_Str(Str_init_from_string(found)), ctx));
+			VecCToken_add(&res, CToken_init(CTOKEN_BASIC, string_create_from_Str(Str_init_from_string(found)), ctx));
 			i += strlen(found);
 			continue;
 		}
@@ -332,7 +341,7 @@ int VecCToken_from_CToken(const CToken src, VecCToken *pres)
 			goto VecCToken_from_CTokens_end_error;
 		}
 		i += strlen(found);
-		VecCToken_add(&res, CToken_init(CTOKEN_IDENTIFIER, found, ctx));
+		VecCToken_add(&res, CToken_init(CTOKEN_BASIC, found, ctx));
 	}
 	if (is_quote) {
 		printf_error(quote_start_ctx, "unfinished string started with character: %c\n", quote_char);
@@ -462,7 +471,7 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 			continue;
 		}
 		if (streq_part_in_arr(&stream->buf[s->i], op, &found)) {
-			*pres = CToken_init(CTOKEN_IDENTIFIER, string_create_from_Str(Str_init_from_string(found)), ctx);
+			*pres = CToken_init(CTOKEN_BASIC, string_create_from_Str(Str_init_from_string(found)), ctx);
 			CTokenParserState_forward(s, strlen(found));
 			return 1;
 		}
@@ -474,7 +483,7 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 			return 0;
 		}
 		CTokenParserState_forward(s, strlen(found));
-		*pres = CToken_init(CTOKEN_IDENTIFIER, found, ctx);
+		*pres = CToken_init(CTOKEN_BASIC, found, ctx);
 		return 1;
 	}
 	if (s->is_quote) {
