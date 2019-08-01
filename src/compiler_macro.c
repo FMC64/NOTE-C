@@ -48,7 +48,7 @@ int CMacro_parse(CStream *stream, CToken macro)
 		return 0;
 	}
 	if (name.type != CTOKEN_IDENTIFIER) {
-		printf_error(macro.ctx, "expected name for preprocessor directive");
+		printf_error(macro.ctx, "expected valid identifier for preprocessor directive");
 		VecCToken_destroy(tokens);
 		return 0;
 	}
