@@ -29,3 +29,4 @@ SourceFile=:src\compiler_parser.c
 SourceFile=:src\compiler_type.c
 SourceFile=:src\compiler_literal.c
 SourceFile=:src\compiler_stream.c
+SourceFile=:src\compiler_macro.c

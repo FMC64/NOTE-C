@@ -14,6 +14,7 @@ int VecCToken_at(VecCToken vec, size_t i, CToken *pres);
 void VecCToken_flush(VecCToken *vec);
 void VecCToken_moveArea(VecCToken *src, size_t src_start, size_t src_size, VecCToken *dst);
 void VecCToken_merge(VecCToken *dst, VecCToken *to_append);
+VecCToken VecCToken_offset(VecCToken vec, size_t off);
 void VecCToken_destroy(VecCToken vec);
 
 int CFile_create(const char *filepath, CFile *pres);
@@ -122,3 +123,8 @@ void CTypeFull_destroy(CTypeFull *type);
 
 char* CStruct_type(CStruct *str);
 char* CStruct_name(CStruct *str);
+
+int CMacro_init(void);
+void CMacro_quit(void);
+int CMacro_parse(CStream *stream, CToken macro);
+int CMacro_canAddToken(CStream *stream);

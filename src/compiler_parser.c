@@ -341,6 +341,8 @@ int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx)
 
 	if (!CStream_at(scope->stream, &cur))
 		return 0;
+	if (cur.type != CTOKEN_IDENTIFIER)
+		return 0;
 	if (!CScope_resolve(scope, cur.str, &sym))
 		return 0;
 	if (sym.type != CSYMBOL_KEYWORD)

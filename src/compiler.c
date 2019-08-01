@@ -46,6 +46,7 @@ void VecCToken_add(VecCToken *vec, CToken to_add)
 	}
 	vec->token[cur] = to_add;
 }
+
 void VecCToken_print(VecCToken vec)
 {
 	size_t i;
@@ -102,6 +103,14 @@ void VecCToken_merge(VecCToken *dst, VecCToken *to_append)
 {
 	VecCToken_moveArea(to_append, 0, to_append->count, dst);
 	VecCToken_destroy(*to_append);
+}
+
+VecCToken VecCToken_offset(VecCToken vec, size_t off)
+{
+	VecCToken res = vec;
+
+	res.token = &res.token[off];
+	return res;
 }
 
 void VecCToken_destroy(VecCToken vec)

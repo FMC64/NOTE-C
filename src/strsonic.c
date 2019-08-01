@@ -285,8 +285,10 @@ int StrSonic_resolve(StrSonic *sonic, const char *key, unsigned char *type, void
 	if (!StrSonic_resolveNode(sonic, key, &pnode))
 		return 0;
 	snode = StrSonicNode_dump(pnode);
-	*type = snode.type;
-	*data = snode.data;
+	if (type != NULL)
+		*type = snode.type;
+	if (data != NULL)
+		*data = snode.data;
 	return 1;
 }
 
@@ -296,6 +298,8 @@ int StrSonic_resolveCSymbol(StrSonic *sonic, const char *key, CSymbol *pres)
 	void *data;
 
 	if (!StrSonic_resolve(sonic, key, &type, &data))
+		return 0;
+	if (type == CSYMBOL_NONE)
 		return 0;
 	*pres = CSymbol_init(type, data);
 	return 1;

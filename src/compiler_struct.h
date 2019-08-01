@@ -69,6 +69,7 @@ typedef struct {
 } CParser;
 
 typedef enum {
+	CSYMBOL_NONE,
 	CSYMBOL_KEYWORD,
 	CSYMBOL_VARIABLE,
 	CSYMBOL_TYPE
