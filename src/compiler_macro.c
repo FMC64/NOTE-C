@@ -60,7 +60,7 @@ static void write_token(void *buf, size_t *i, CToken to_write)
 	}
 }
 
-static CMacro_print(void *data)
+static void CMacro_print(void *data)
 {
 	CMacro macro = CMacro_dump(data);
 	char *cur_str;
