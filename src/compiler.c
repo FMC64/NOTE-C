@@ -11,6 +11,21 @@ CToken CToken_init(CTokenType type, const char *str, CContext ctx)
 	return res;
 }
 
+CToken CToken_dup(CToken src)
+{
+	CToken res;
+	size_t size;
+
+	res = src;
+	if (CToken_isString(src)) {
+		size = CToken_stringSize(src);
+		res.str = (char*)malloc(size);
+		memcpy(res.str, src.str, size);
+	} else
+		res.str = strdup(src.str);
+	return res;
+}
+
 int CTokenType_isString(CTokenType type)
 {
 	return (type >= CTOKEN_STRING_SIMPLE) && (type <= CTOKEN_STRING_CHEVRON);
@@ -31,6 +46,13 @@ int CToken_isIdentifier(CToken token)
 	if (token.type != CTOKEN_BASIC)
 		return 0;
 	return str_is_identifier(token.str);
+}
+
+int CToken_isEndBatch(CToken token)
+{
+	if (CToken_isString(token))
+		return 0;
+	return streq(token.str, ";");
 }
 
 void CToken_destroy(CToken token)
@@ -132,6 +154,36 @@ void VecCToken_destroy(VecCToken vec)
 	VecCToken_flush(&vec);
 }
 
+VecVecCToken VecVecCToken_init(void)
+{
+	VecVecCToken res;
+
+	res.count = 0;
+	res.allocated = 0;
+	res.vec = NULL;
+	return res;
+}
+
+void VecVecCToken_add(VecVecCToken *vec, VecCToken to_add)
+{
+	size_t cur = vec->count++;
+
+	if (vec->count > vec->allocated) {
+		vec->allocated += 4;
+		vec->vec = (VecCToken*)realloc(vec->vec, vec->allocated * sizeof(VecCToken));
+	}
+	vec->vec[cur] = to_add;
+}
+
+void VecVecCToken_destroy(VecVecCToken vec)
+{
+	size_t i;
+
+	for (i = 0; i < vec.count; i++)
+		VecCToken_destroy(vec.vec[i]);
+	free(vec.vec);
+}
+
 CBuf CBuf_init(char *input_path)
 {
 	const FONTCHARACTER *path_real = string_to_fontchar(input_path);
@@ -161,7 +213,7 @@ static int streq_part_in_arr(const char *str, const char **arr, const char **pfo
 char char_lower(char to_lower)
 {
 	if ((to_lower >= 'A') && (to_lower <= 'Z'))
-		to_lower -= 32;
+		to_lower += 32;
 	return to_lower;
 }
 
@@ -476,7 +528,7 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 			continue;
 		}
 		if (streq_part_in_arr(&stream->buf[s->i], op, &found)) {
-			*pres = CToken_init(CTOKEN_BASIC, string_create_from_Str(Str_init_from_string(found)), ctx);
+			*pres = CToken_init(CTOKEN_BASIC, strdup(found), ctx);
 			CTokenParserState_forward(s, strlen(found));
 			return 1;
 		}

@@ -296,6 +296,7 @@ int CParser_exec(const char *path)
 		CScope_destroy(scope);
 		return 0;
 	}
+	VecCToken_print(scope->stream->tokens.vec);
 	while (!CStream_isEof(scope->stream)) {
 		if (CKeyword_poll(scope, &keyword, NULL)) {
 			switch (keyword) {

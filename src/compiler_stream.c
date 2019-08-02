@@ -136,6 +136,32 @@ void VecCFile_destroy(VecCFile vec)
 	VecCFile_flush(&vec);
 }
 
+StreamCTokenPoly StreamCTokenPoly_initFromCStream(CStream *stream)
+{
+	StreamCTokenPoly res;
+
+	res.isMacro = 0;
+	res.stream = stream;
+	return res;
+}
+
+StreamCTokenPoly StreamCTokenPoly_initFromCMacro(CMacro *macro)
+{
+	StreamCTokenPoly res;
+
+	res.isMacro = 1;
+	res.macro = macro;
+	return res;
+}
+
+int StreamCTokenPoly_poll(StreamCTokenPoly *stream, CToken *pres)
+{
+	if (stream->isMacro)
+		return CMacro_nextToken(stream->macro, pres);
+	else
+		return CStream_poll(stream->stream, pres);
+}
+
 int CStream_create(const char *filepath, CStream **pres)
 {
 	CStream *res;
@@ -172,9 +198,34 @@ int CStream_currentStream(CStream *stream, CFile **pres)
 	return 1;
 }
 
-static int is_token_end_batch(CToken token)
+// raw token, no macro substitution performed
+int CStream_pollToken(CStream *stream, CToken *pres)
 {
-	return streq(token.str, ";");
+	CFile *to_poll;
+	CToken cur;
+	int is_err;
+
+	while (1) {
+		if (!CStream_currentStream(stream, &to_poll))
+			return 0;
+		if (!CFile_readToken(to_poll, &cur, &is_err)) {
+			if (is_err)
+				return 0;
+			VecCFile_move(&stream->streams, stream->streams.size - 1, &stream->terminatedStreams);
+		} else {
+			if (cur.type == CTOKEN_MACRO) {
+				if (!CStream_parseMacro(stream, cur)) {
+					CToken_destroy(cur);
+					return 0;
+				}
+				CToken_destroy(cur);
+			} else if (CStream_canAddToken(stream)){
+				*pres = cur;
+				return 1;
+			} else
+				CToken_destroy(cur);
+		}
+	}
 }
 
 static int poll_tokens(CStream *stream, VecCToken *pres)
@@ -183,6 +234,7 @@ static int poll_tokens(CStream *stream, VecCToken *pres)
 	CFile *to_poll;
 	CToken cur;
 	int is_err;
+	int is_end = 0;
 
 	while (1) {
 		if (!CStream_currentStream(stream, &to_poll)) {
@@ -204,10 +256,12 @@ static int poll_tokens(CStream *stream, VecCToken *pres)
 				}
 				CToken_destroy(cur);
 			} else if (CStream_canAddToken(stream)){
-				VecCToken_add(&res, cur);
-				if (is_token_end_batch(cur))
+				if (!CStream_substituteMacro(stream, cur, &stream->buf, StreamCTokenPoly_initFromCStream(stream), &is_end))
+					return 0;
+				if (is_end)
 					break;
-			}
+			} else
+				CToken_destroy(cur);
 		}
 	}
 	*pres = res;
@@ -230,7 +284,7 @@ static int get_first_ending_token(VecCToken buf, size_t *pres)
 	size_t i;
 
 	for (i = 0; i < buf.count; i++)
-		if (is_token_end_batch(buf.token[i])) {
+		if (CToken_isEndBatch(buf.token[i])) {
 			*pres = i;
 			return 1;
 		}

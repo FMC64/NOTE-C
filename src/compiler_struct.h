@@ -23,6 +23,12 @@ typedef struct {
 } VecCToken;
 
 typedef struct {
+	size_t count;
+	size_t allocated;
+	VecCToken *vec;
+} VecVecCToken;
+
+typedef struct {
 	VecCToken vec;
 	size_t i;
 } StreamCToken;
@@ -229,3 +235,9 @@ typedef struct {
 	char *tokenBase;
 	char *tokenCur;
 } CMacro;
+
+typedef struct {
+	int isMacro;
+	CMacro *macro;
+	CStream *stream;
+} StreamCTokenPoly;

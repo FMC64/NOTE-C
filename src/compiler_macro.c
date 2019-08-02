@@ -164,19 +164,20 @@ CMacro CMacro_dump(void *src)
 static int preproc_define(CStream *stream, VecCToken tokens, CContext ctx)
 {
 	CToken name;
-	StreamCToken s = StreamCToken_init(tokens);
+	StreamCToken s = StreamCToken_init(tokens), save;
 	VecStr args = VecStr_init();
 
 	if (!StreamCToken_poll(&s, &name)) {
 		printf_error(ctx, "expected a name for macro definition");
 		return 0;
 	}
+	save = s;
 	if (!CToken_isIdentifier(name)) {
 		printf_error(name.ctx, "expected a valid identifier for macro name");
 		return 0;
 	}
 	if (!define_get_args(&s, &args))
-		s = StreamCToken_init(tokens);
+		s = save;
 	StrSonic_add(&stream->macros, name.str, 0, CMacro_create(args, StreamCToken_offset(&s).vec));
 	free(args.str);
 	return 1;
@@ -245,4 +246,57 @@ int CStream_canAddToken(CStream *stream)
 void StrSonic_CMacro_destroy(unsigned char type, void *data)
 {
 	free(data);
+}
+
+static int resolve_macro(CStream *stream, const char *name, CMacro *pres)
+{
+	void *data;
+
+	if (!StrSonic_resolve(&stream->macros, name, NULL, &data))
+		return 0;
+	*pres = CMacro_dump(data);
+	return 1;
+}
+
+static int add_token(VecCToken *vec, CToken to_add, int *is_end)
+{
+	*is_end |= CToken_isEndBatch(to_add);
+	VecCToken_add(vec, to_add);
+	return 1;
+}
+
+static int substitute_macro_ac(CStream *stream, CToken to_subs, VecCToken *dest, StreamCTokenPoly *to_poll, int *is_end, size_t depth, CContext first_token_ctx)
+{
+	CMacro macro;
+	StreamCTokenPoly macro_stream;
+	CToken cur;
+	CToken new_token;
+	size_t limitDepth = 64;
+
+	if (depth > limitDepth) {
+		printf_error(first_token_ctx, "too deep macro ! (exceeds level %u)", limitDepth);
+		CToken_destroy(to_subs);
+		return 0;
+	}
+	if (CToken_isString(to_subs))
+		return add_token(dest, to_subs, is_end);
+	if (!resolve_macro(stream, to_subs.str, &macro))
+		return add_token(dest, to_subs, is_end);
+	CToken_destroy(to_subs);
+	macro_stream = StreamCTokenPoly_initFromCMacro(&macro);
+	if (macro.argumentCount > 0) {
+		
+	}
+	while (CMacro_nextToken(&macro, &cur)) {
+		new_token = CToken_dup(cur);
+		new_token.ctx = first_token_ctx;
+		if (!substitute_macro_ac(stream, new_token, dest, &macro_stream, is_end, depth + 1, first_token_ctx))
+			return 0;
+		}
+	return 1;
+}
+
+int CStream_substituteMacro(CStream *stream, CToken to_subs, VecCToken *dest, StreamCTokenPoly to_poll, int *is_end)
+{
+	return substitute_macro_ac(stream, to_subs, dest, &to_poll, is_end, 0, to_subs.ctx);
 }

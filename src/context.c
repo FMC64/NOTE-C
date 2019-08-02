@@ -25,7 +25,7 @@ CContext CContext_init(const char *file, int line, int colon)
 
 CContext CContext_null(void)
 {
-	return CContext_init("null", 0, 0);
+	return CContext_init("{undefined file}", 0, 0);
 }
 
 void CContext_print(CContext ctx)

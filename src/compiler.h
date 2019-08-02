@@ -2,10 +2,12 @@
 #pragma once
 
 CToken CToken_init(CTokenType type, const char *str, CContext ctx);
+CToken CToken_dup(CToken src);
 int CTokenType_isString(CTokenType type);
 int CToken_isString(CToken token);
 size_t CToken_stringSize(CToken token);
 int CToken_isIdentifier(CToken token);
+int CToken_isEndBatch(CToken token);
 void CToken_destroy(CToken token);
 
 VecCToken VecCToken_init(void);
@@ -18,6 +20,10 @@ void VecCToken_moveArea(VecCToken *src, size_t src_start, size_t src_size, VecCT
 void VecCToken_merge(VecCToken *dst, VecCToken *to_append);
 VecCToken VecCToken_offset(VecCToken vec, size_t off);
 void VecCToken_destroy(VecCToken vec);
+
+VecVecCToken VecVecCToken_init(void);
+void VecVecCToken_add(VecVecCToken *vec, VecCToken to_add);
+void VecVecCToken_destroy(VecVecCToken vec);
 
 int CFile_create(const char *filepath, CFile *pres);
 int CFile_pollFileBytes(CFile *stream, size_t buf_start, size_t size);
@@ -32,9 +38,14 @@ void VecCFile_move(VecCFile *src, size_t src_ndx, VecCFile *dst);
 void VecCFile_moveArea(VecCFile *src, size_t src_start, size_t src_size, VecCFile *dst);
 void VecCFile_destroy(VecCFile vec);
 
+StreamCTokenPoly StreamCTokenPoly_initFromCStream(CStream *stream);
+StreamCTokenPoly StreamCTokenPoly_initFromCMacro(CMacro *macro);
+int StreamCTokenPoly_poll(StreamCTokenPoly *stream, CToken *pres);
+
 int CStream_create(const char *filepath, CStream **pres);
 void CStream_destroy(CStream *stream);
 int CStream_currentStream(CStream *stream, CFile **pres);
+int CStream_pollToken(CStream *stream, CToken *pres);
 int CStream_nextBatch(CStream *stream);
 int CStream_isEof(CStream *stream);
 StreamCToken StreamCToken_init(VecCToken vec);
@@ -155,3 +166,5 @@ int CMacro_nextToken(CMacro *macro, CToken *pres);
 void CMacro_rewindArguments(CMacro *macro);
 void CMacro_rewindTokens(CMacro *macro);
 CMacro CMacro_dump(void *src);
+
+int CStream_substituteMacro(CStream *stream, CToken to_subs, VecCToken *dest, StreamCTokenPoly to_poll, int *is_end);

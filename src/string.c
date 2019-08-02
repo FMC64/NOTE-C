@@ -320,5 +320,3 @@ void VecStr_destroy(VecStr vec)
 	free(vec.str);
 	return;
 }
-
-
