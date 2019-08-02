@@ -7,9 +7,6 @@ static CTokenParserState CTokenParserState_init(void)
 
 	res.i = 0;
 	res.i_file = 0;
-	res.is_comment = 0;
-	res.is_comment_single_line = 0;
-	res.is_quote = 0;
 	res.line = 0;
 	res.line_start = 0;
 	return res;
@@ -154,17 +151,18 @@ StreamCTokenPoly StreamCTokenPoly_initFromStreamCToken(StreamCToken *stream)
 	return res;
 }
 
-int StreamCTokenPoly_poll(StreamCTokenPoly *stream, CToken *pres)
+int StreamCTokenPoly_poll(StreamCTokenPoly *stream, CToken *pres, int *is_err)
 {
 	int res;
 
 	if (stream->isBufferedStream) {
+		*is_err = 0;
 		res = StreamCToken_poll(stream->bufferedStream, pres);
 		if (res)
 			*pres = CToken_dup(*pres);
 		return res;
 	} else
-		return CStream_pollToken(stream->stream, pres);
+		return CStream_pollToken(stream->stream, pres, is_err);
 }
 
 int CStream_create(const char *filepath, CStream **pres)
@@ -204,17 +202,16 @@ int CStream_currentStream(CStream *stream, CFile **pres)
 }
 
 // raw token, no macro substitution performed
-int CStream_pollToken(CStream *stream, CToken *pres)
+int CStream_pollToken(CStream *stream, CToken *pres, int *is_err)
 {
 	CFile *to_poll;
 	CToken cur;
-	int is_err;
 
 	while (1) {
 		if (!CStream_currentStream(stream, &to_poll))
 			return 0;
-		if (!CFile_readToken(to_poll, &cur, &is_err)) {
-			if (is_err)
+		if (!CFile_readToken(to_poll, &cur, is_err)) {
+			if (*is_err)
 				return 0;
 			VecCFile_move(&stream->streams, stream->streams.size - 1, &stream->terminatedStreams);
 		} else {
@@ -299,6 +296,31 @@ static int get_first_ending_token(VecCToken buf, size_t *pres)
 	return 0;
 }
 
+static void CToken_stringCat(CToken *token, CToken to_cat)
+{
+	Str a = Str_dup(Str_init_from_CToken(*token));
+	Str b = Str_init_from_CToken(to_cat);
+	size_t size;
+
+	Str_append(&a, b);
+	size = a.size;
+	Str_prepend(&a, Str_init(sizeof(size_t), (char*)&size));
+	free(token->str);
+	token->str = a.data;
+}
+
+static void VecCToken_mergeStrings(VecCToken *vec)
+{
+	size_t i;
+
+	for (i = 0; i < vec->count - 1; i++)
+		if ((vec->token[i].type == CTOKEN_STRING_DOUBLE) && (vec->token[i + 1].type == CTOKEN_STRING_DOUBLE)) {
+			CToken_stringCat(&vec->token[i], vec->token[i + 1]);
+			VecCToken_deleteToken(vec, i + 1);
+			i--;
+		}
+}
+
 // Token batches are ended by a ; or {
 int CStream_nextBatch(CStream *stream)
 {
@@ -313,6 +335,7 @@ int CStream_nextBatch(CStream *stream)
 	if (!get_first_ending_token(stream->buf, &end))
 		end = stream->buf.count - 1;
 	VecCToken_moveArea(&stream->buf, 0, end + 1, &stream->tokens.vec);
+	VecCToken_mergeStrings(&stream->tokens.vec);
 	return 1;
 }
 

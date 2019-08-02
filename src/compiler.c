@@ -476,19 +476,24 @@ VecCToken_from_CTokens_end_error:
 int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 {
 	CTokenParserState *s = &stream->parserState;
-	CContext ctx;
 	char *found;
 	int isMacro = 0;
 	size_t esc_size;
 	Str acc;
+	CContext ctx;
+	int is_comment = 0;
+	int is_comment_single_line = 0;
+	int is_quote = 0;
+	char quote_char;
+	CContext quote_start_ctx;
 
 	*is_err = 0;
 	while (stream->buf[s->i] != 0) {
 		if (s->i >= STREAMCTOKEN_BUFSIZE) {
-			if (s->is_quote || isMacro)
+			if (is_quote || isMacro)
 				Str_append(&acc, Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]));
 			if (!CFile_pollFile(stream)) {
-				if (s->is_quote || isMacro)
+				if (is_quote || isMacro)
 					Str_destroy(acc);
 				*is_err = 1;
 				return 0;
@@ -496,14 +501,20 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 		}
 		ctx = CContext_init(stream->filepath, s->line + 1, s->i_file - s->line_start + 1);
 		if (stream->buf[s->i] == '\n') {
+			if (is_quote && (stream->buf[s->i] == '\n')) {
+				printf_error(ctx, "raw linefeed in literal string");
+				Str_destroy(acc);
+				*is_err = 1;
+				return 0;
+			}
 			s->line++;
 			s->line_start = s->i_file + 1;
-			s->is_comment_single_line = 0;
+			is_comment_single_line = 0;
 		}
 		if (isMacro) {
 			if (stream->buf[s->i] == '\n') {
 				Str_append(&acc, Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]));
-				*pres = CToken_init(CTOKEN_MACRO, string_create_from_Str(acc), s->quote_start_ctx);
+				*pres = CToken_init(CTOKEN_MACRO, string_create_from_Str(acc), quote_start_ctx);
 				Str_destroy(acc);
 				CTokenParserState_forward(s, 1);
 				return 1;
@@ -511,13 +522,13 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 			CTokenParserState_forward(s, 1);
 			continue;
 		}
-		if (s->is_comment_single_line) {
+		if (is_comment_single_line) {
 			CTokenParserState_forward(s, 1);
 			continue;
 		}
-		if (s->is_comment) {
+		if (is_comment) {
 			if (streq_part(&stream->buf[s->i], "*/")) {
-				s->is_comment = 0;
+				is_comment = 0;
 				CTokenParserState_forward(s, 2);
 				continue;
 			}
@@ -525,54 +536,54 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 			continue;
 		}
 		if ((stream->buf[s->i] == '"') || (stream->buf[s->i] == '\'')) {
-			if (!s->is_quote)
-				s->quote_char = stream->buf[s->i];
-			if ((!s->is_quote) || (stream->buf[s->i] == s->quote_char)) {
-				if (s->is_quote) {
+			if (!is_quote)
+				quote_char = stream->buf[s->i];
+			if ((!is_quote) || (stream->buf[s->i] == quote_char)) {
+				if (is_quote) {
 					CTokenParserState_forward(s, 1);
 					Str_append(&acc, Str_init(s->i - s->quote_start - 1, &stream->buf[s->quote_start]));
-					if (!get_escaped_string(acc, &found, &esc_size, s->quote_start_ctx)) {
+					if (!get_escaped_string(acc, &found, &esc_size, quote_start_ctx)) {
 						Str_destroy(acc);
 						*is_err = 1;
 						return 0;
 					}
 					Str_destroy(acc);
-					if (s->quote_char == '\'') {
+					if (quote_char == '\'') {
 						if (esc_size > 1) {
-							printf_error(s->quote_start_ctx, "only one character can fit in this. you tried to stuff %u instead.", esc_size);
+							printf_error(quote_start_ctx, "only one character can fit in this. you tried to stuff %u instead.", esc_size);
 							free(found);
 							*is_err = 1;
 							return 0;
 						}
 						if (esc_size == 0) {
-							printf_error(s->quote_start_ctx, "you forgot to put a character there !");
+							printf_error(quote_start_ctx, "you forgot to put a character there !");
 							free(found);
 							*is_err = 1;
 							return 0;
 						}
 					}
-					*pres = CToken_init(get_string_type(s->quote_char), found, s->quote_start_ctx);
+					*pres = CToken_init(get_string_type(quote_char), found, quote_start_ctx);
 				} else {
 					s->quote_start = s->i + 1;
 					acc = Str_empty();
-					s->quote_start_ctx = ctx;
+					quote_start_ctx = ctx;
 				}
-				s->is_quote = !s->is_quote;
-				if (!s->is_quote)
+				is_quote = !is_quote;
+				if (!is_quote)
 					return 1;
 			}
 		}
-		if (s->is_quote) {
+		if (is_quote) {
 			CTokenParserState_forward(s, 1);
 			continue;
 		}
 		if (streq_part(&stream->buf[s->i], "//")) {
-			s->is_comment_single_line = 1;
+			is_comment_single_line = 1;
 			CTokenParserState_forward(s, 2);
 			continue;
 		}
 		if (streq_part(&stream->buf[s->i], "/*")) {
-			s->is_comment = 1;
+			is_comment = 1;
 			CTokenParserState_forward(s, 2);
 			continue;
 		}
@@ -580,8 +591,8 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 			s->quote_start = s->i + 1;
 			acc = Str_empty();
 			isMacro = 1;
-			s->quote_start_ctx = ctx;
-			s->quote_start_ctx.colon++;
+			quote_start_ctx = ctx;
+			quote_start_ctx.colon++;
 			continue;
 		}
 		if (streq_part_in_arr(&stream->buf[s->i], sep, &found)) {
@@ -604,9 +615,9 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 		*pres = CToken_init(CTOKEN_BASIC, found, ctx);
 		return 1;
 	}
-	if (s->is_quote) {
+	if (is_quote) {
 		Str_destroy(acc);
-		printf_error(s->quote_start_ctx, "unfinished string started with character: %c\n", s->quote_char);
+		printf_error(quote_start_ctx, "unfinished string started with character: %c\n", quote_char);
 		*is_err = 1;
 		return 0;
 	}

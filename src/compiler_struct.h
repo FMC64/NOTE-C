@@ -36,12 +36,7 @@ typedef struct {
 typedef struct {
 	size_t i;
 	size_t i_file;
-	int is_comment;
-	int is_comment_single_line;
-	int is_quote;
-	char quote_char;
 	size_t quote_start;
-	CContext quote_start_ctx;
 	size_t line;
 	size_t line_start;
 } CTokenParserState;

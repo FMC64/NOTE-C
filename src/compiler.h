@@ -44,12 +44,12 @@ void VecCFile_destroy(VecCFile vec);
 
 StreamCTokenPoly StreamCTokenPoly_initFromCStream(CStream *stream);
 StreamCTokenPoly StreamCTokenPoly_initFromStreamCToken(StreamCToken *stream);
-int StreamCTokenPoly_poll(StreamCTokenPoly *stream, CToken *pres);
+int StreamCTokenPoly_poll(StreamCTokenPoly *stream, CToken *pres, int *is_err);
 
 int CStream_create(const char *filepath, CStream **pres);
 void CStream_destroy(CStream *stream);
 int CStream_currentStream(CStream *stream, CFile **pres);
-int CStream_pollToken(CStream *stream, CToken *pres);
+int CStream_pollToken(CStream *stream, CToken *pres, int *is_err);
 int CStream_nextBatch(CStream *stream);
 int CStream_isEof(CStream *stream);
 StreamCToken StreamCToken_init(VecCToken vec);

@@ -15,6 +15,7 @@ Str Str_create_from_string(const char *src);
 void Str_append(Str *str, const Str to_add);
 void Str_prepend(Str *str, const Str to_pre);
 void Str_remove(Str *str, size_t start, size_t size);
+Str Str_dup(Str str);
 int Str_char_escape(Str str, size_t *i, char *pres, CContext ctx);
 int Str_escape(Str str, Str *pres, CContext ctx);
 void Str_print(Str str);

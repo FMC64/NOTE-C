@@ -265,19 +265,13 @@ static void print_error_unexp_token_at(CScope *scope)
 {
 	const char *str = "{undefined}";
 	CToken cur;
-	int is_Str = 0;
 
 	if (CStream_at(scope->stream, &cur)) {
-		str = cur.str;
-		if (CToken_isString(cur))
-			is_Str = 1;
-	}
-	if (is_Str) {
-		printf_error_part(CStream_atCtx(scope->stream), "unexpected token: '", str);
-		Str_print(Str_init_from_CToken(cur));
-		printf("'\n\n");
+		printf_error_part(cur.ctx, "unexpected token: ");
+		CToken_print(cur);
+		printf("\n\n");
 	} else
-		printf_error(CStream_atCtx(scope->stream), "unexpected token: '%s'", str);
+		printf_error(CStream_atCtx(scope->stream), "unexpected token: %s", str);
 }
 
 int CParser_exec(const char *path)

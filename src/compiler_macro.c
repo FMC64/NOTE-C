@@ -289,9 +289,11 @@ static int poll_args(StreamCTokenPoly *to_poll, VecVecCToken *pres, CToken macro
 	VecCToken arg = VecCToken_init();
 	CToken cur;
 	size_t level = 0;
+	int is_err;
 
-	if (!StreamCTokenPoly_poll(to_poll, &cur)) {
-		printf_error(ctx, "expected arguments for macro '%s'", macro.str);
+	if (!StreamCTokenPoly_poll(to_poll, &cur, &is_err)) {
+		if (!is_err)
+			printf_error(ctx, "expected arguments for macro '%s'", macro.str);
 		goto poll_args_error;
 	}
 	if (!CToken_streq(cur, "(")) {
@@ -300,8 +302,9 @@ static int poll_args(StreamCTokenPoly *to_poll, VecVecCToken *pres, CToken macro
 	}
 	CToken_destroy(cur);
 	while (1) {
-		if (!StreamCTokenPoly_poll(to_poll, &cur)) {
-			printf_error(ctx, "expected ')' for ending macro arguments for '%s'", macro.str);
+		if (!StreamCTokenPoly_poll(to_poll, &cur, &is_err)) {
+			if (!is_err)
+				printf_error(ctx, "expected ')' for ending macro arguments for '%s'", macro.str);
 			goto poll_args_error;
 		}
 		if (level == 0) {
@@ -418,6 +421,7 @@ static int substitute_macro_ac(CStream *stream, CToken to_subs, VecCToken *dest,
 	StreamCTokenPoly macro_stream;
 	size_t limitDepth = 64;
 	size_t i;
+	int is_err;
 
 	if (depth > limitDepth) {
 		printf_error(first_token_ctx, "too deep macro ! (exceeds level %u)", limitDepth);
@@ -456,7 +460,7 @@ static int substitute_macro_ac(CStream *stream, CToken to_subs, VecCToken *dest,
 	}
 	macro_stream_ctoken = StreamCToken_init(macro_tokens);
 	macro_stream = StreamCTokenPoly_initFromStreamCToken(&macro_stream_ctoken);
-	while (StreamCTokenPoly_poll(&macro_stream, &cur)) {
+	while (StreamCTokenPoly_poll(&macro_stream, &cur, &is_err)) {
 		if (!substitute_macro_ac(stream, cur, dest, &macro_stream, is_end, depth + 1, first_token_ctx)) {
 			CToken_destroy(cur);
 			VecCToken_destroy(macro_tokens);
@@ -467,7 +471,7 @@ static int substitute_macro_ac(CStream *stream, CToken to_subs, VecCToken *dest,
 	}
 	VecCToken_destroy(macro_tokens);
 	VecVecCToken_destroy(args);
-	return 1;
+	return !is_err;
 }
 
 int CStream_substituteMacro(CStream *stream, CToken to_subs, VecCToken *dest, StreamCTokenPoly to_poll, int *is_end)
