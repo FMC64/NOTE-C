@@ -8,6 +8,7 @@ int CToken_isString(CToken token);
 size_t CToken_stringSize(CToken token);
 int CToken_isIdentifier(CToken token);
 int CToken_isEndBatch(CToken token);
+void CToken_print(CToken token);
 int CToken_streq(CToken token, const char *str);
 void CToken_destroy(CToken token);
 
@@ -20,6 +21,7 @@ void VecCToken_flush(VecCToken *vec);
 void VecCToken_moveArea(VecCToken *src, size_t src_start, size_t src_size, VecCToken *dst);
 void VecCToken_merge(VecCToken *dst, VecCToken *to_append);
 VecCToken VecCToken_offset(VecCToken vec, size_t off);
+void VecCToken_deleteToken(VecCToken *vec, size_t ndx);
 void VecCToken_destroy(VecCToken vec);
 
 VecVecCToken VecVecCToken_init(void);
@@ -171,3 +173,8 @@ CMacro CMacro_dump(void *src);
 CMacro CMacro_null(void);
 
 int CStream_substituteMacro(CStream *stream, CToken to_subs, VecCToken *dest, StreamCTokenPoly to_poll, int *is_end);
+
+CMacroStackFrame CMacroStackFrame_init(int status);
+VecCMacroStackFrame VecCMacroStackFrame_init(void);
+void VecCMacroStackFrame_add(VecCMacroStackFrame *vec, CMacroStackFrame to_add);
+void VecCMacroStackFrame_destroy(VecCMacroStackFrame vec);

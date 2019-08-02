@@ -60,6 +60,37 @@ int CToken_isEndBatch(CToken token)
 	return CToken_streq(token, ";");
 }
 
+static void get_quote_char(CTokenType type, char *start, char *end)
+{
+	switch (type) {
+	case CTOKEN_STRING_SIMPLE:
+		*start = '\'';
+		*end = '\'';
+		break;
+	case CTOKEN_STRING_DOUBLE:
+		*start = '"';
+		*end = '"';
+		break;
+	case CTOKEN_STRING_CHEVRON:
+		*start = '<';
+		*end = '>';
+		break;
+	}
+}
+
+void CToken_print(CToken token)
+{
+	char quote_start = '"', quote_end = '"';
+
+	if (CToken_isString(token)) {
+		get_quote_char(token.type, &quote_start, &quote_end);
+		printf("%c", quote_start);
+		Str_print(Str_init_from_CToken(token));
+		printf("%c", quote_end);
+	} else
+		printf(token.str);
+}
+
 void CToken_destroy(CToken token)
 {
 	free(token.str);
@@ -92,12 +123,8 @@ void VecCToken_print(VecCToken vec)
 
 	printf("Tokens: (%u)\n", vec.count);
 	for (i = 0; i < vec.count; i++) {
-		if (CToken_isString(vec.token[i])) {
-			printf("'");
-			Str_print(Str_init_from_CToken(vec.token[i]));
-			printf("' ");
-		} else
-			printf("'%s' ", vec.token[i].str);
+		CToken_print(vec.token[i]);
+		printf(", ");
 	}
 	printf("\n");
 }
@@ -156,6 +183,16 @@ VecCToken VecCToken_offset(VecCToken vec, size_t off)
 	res.allocated -= off;
 	res.token = &res.token[off];
 	return res;
+}
+
+void VecCToken_deleteToken(VecCToken *vec, size_t ndx)
+{
+	size_t i;
+
+	CToken_destroy(vec->token[ndx]);
+	vec->count--;
+	for (i = ndx; i < vec->count; i++)
+		vec->token[i] = vec->token[i + 1];
 }
 
 void VecCToken_destroy(VecCToken vec)

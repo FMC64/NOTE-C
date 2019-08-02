@@ -241,3 +241,15 @@ typedef struct {
 	StreamCToken *bufferedStream;
 	CStream *stream;
 } StreamCTokenPoly;
+
+typedef struct {
+	int isCurrent;
+	int hasPassed;
+	int hasElsePassed;
+} CMacroStackFrame;
+
+typedef struct {
+	size_t count;
+	size_t allocated;
+	CMacroStackFrame *stack;
+} VecCMacroStackFrame;

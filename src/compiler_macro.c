@@ -357,6 +357,55 @@ static int resolve_arg(char *name, void *macroData, VecVecCToken macroArgs, VecC
 	return 0;
 }
 
+static int ensure_token_basic(CToken token)
+{
+	if (token.type != CTOKEN_BASIC) {
+		printf_error_part(token.ctx, "can't use that token for merging: ");
+		CToken_print(token);
+		printf("\nit must be a simple token, no string\n\n");
+		return 0;
+	}
+	return 1;
+}
+
+static int merge_tokens(VecCToken *vec, size_t to_keep, size_t to_merge, CContext op_ctx)
+{
+	CToken to_keep_token;
+	CToken to_merge_token;
+	char *merged;
+
+	if (!VecCToken_at(*vec, to_keep, &to_keep_token)) {
+		printf_error(op_ctx, "no left token found for operator ##");
+		return 0;
+	}
+	if (!VecCToken_at(*vec, to_merge, &to_merge_token)) {
+		printf_error(op_ctx, "no right token found for operator ##");
+		return 0;
+	}
+	if (!ensure_token_basic(to_keep_token))
+		return 0;
+	if (!ensure_token_basic(to_merge_token))
+		return 0;
+	to_keep_token.str = (char*)realloc(to_keep_token.str, strlen(to_keep_token.str) + strlen(to_merge_token.str) + 1);
+	strcat(to_keep_token.str, to_merge_token.str);
+	vec->token[to_keep] = to_keep_token;
+	VecCToken_deleteToken(vec, to_merge);
+	return 1;
+}
+
+static int VecCToken_mergeTokens(VecCToken *vec)
+{
+	size_t i;
+
+	for (i = 0; i < vec->count; i++)
+		if (CToken_streq(vec->token[i], "##")) {
+			if (!merge_tokens(vec, i - 1, i + 1, vec->token[i].ctx))
+				return 0;
+			VecCToken_deleteToken(vec, i);
+		}
+	return 1;
+}
+
 static int substitute_macro_ac(CStream *stream, CToken to_subs, VecCToken *dest, StreamCTokenPoly *to_poll, int *is_end, size_t depth, CContext first_token_ctx)
 {
 	CMacro macro;
@@ -400,6 +449,11 @@ static int substitute_macro_ac(CStream *stream, CToken to_subs, VecCToken *dest,
 		} else
 			VecCToken_add(&macro_tokens, new_token);
 	}
+	if (!VecCToken_mergeTokens(&macro_tokens)) {
+		VecCToken_destroy(macro_tokens);
+		VecVecCToken_destroy(args);
+		return 0;
+	}
 	macro_stream_ctoken = StreamCToken_init(macro_tokens);
 	macro_stream = StreamCTokenPoly_initFromStreamCToken(&macro_stream_ctoken);
 	while (StreamCTokenPoly_poll(&macro_stream, &cur)) {
@@ -419,4 +473,42 @@ static int substitute_macro_ac(CStream *stream, CToken to_subs, VecCToken *dest,
 int CStream_substituteMacro(CStream *stream, CToken to_subs, VecCToken *dest, StreamCTokenPoly to_poll, int *is_end)
 {
 	return substitute_macro_ac(stream, to_subs, dest, &to_poll, is_end, 0, to_subs.ctx);
+}
+
+// #if 1 -> status = 1
+// #if 0 -> status = 0
+CMacroStackFrame CMacroStackFrame_init(int status)
+{
+	CMacroStackFrame res;
+
+	res.isCurrent = status;
+	res.hasPassed = 0;
+	res.hasElsePassed = 0;
+	return res;
+}
+
+VecCMacroStackFrame VecCMacroStackFrame_init(void)
+{
+	VecCMacroStackFrame res;
+
+	res.count = 0;
+	res.allocated = 0;
+	res.stack = NULL;
+	return res;
+}
+
+void VecCMacroStackFrame_add(VecCMacroStackFrame *vec, CMacroStackFrame to_add)
+{
+	size_t cur = vec->count++;
+
+	if (vec->count > vec->allocated) {
+		vec->allocated + 4;
+		vec->stack = (CMacroStackFrame*)realloc(vec->stack, vec->allocated * sizeof(CMacroStackFrame));
+	}
+	vec->stack[cur] = to_add;
+}
+
+void VecCMacroStackFrame_destroy(VecCMacroStackFrame vec)
+{
+	free(vec.stack);
 }
