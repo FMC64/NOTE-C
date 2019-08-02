@@ -237,7 +237,7 @@ typedef struct {
 } CMacro;
 
 typedef struct {
-	int isMacro;
-	CMacro *macro;
+	int isBufferedStream;
+	StreamCToken *bufferedStream;
 	CStream *stream;
 } StreamCTokenPoly;

@@ -48,11 +48,16 @@ int CToken_isIdentifier(CToken token)
 	return str_is_identifier(token.str);
 }
 
-int CToken_isEndBatch(CToken token)
+int CToken_streq(CToken token, const char *str)
 {
 	if (CToken_isString(token))
 		return 0;
-	return streq(token.str, ";");
+	return streq(token.str, str);
+}
+
+int CToken_isEndBatch(CToken token)
+{
+	return CToken_streq(token, ";");
 }
 
 void CToken_destroy(CToken token)
@@ -85,8 +90,6 @@ void VecCToken_print(VecCToken vec)
 {
 	size_t i;
 
-	terminal_flush();
-
 	printf("Tokens: (%u)\n", vec.count);
 	for (i = 0; i < vec.count; i++) {
 		if (CToken_isString(vec.token[i])) {
@@ -96,7 +99,13 @@ void VecCToken_print(VecCToken vec)
 		} else
 			printf("'%s' ", vec.token[i].str);
 	}
+	printf("\n");
+}
 
+void VecCToken_display(VecCToken vec)
+{
+	terminal_flush();
+	VecCToken_print(vec);
 	terminal_show();
 }
 
@@ -173,6 +182,21 @@ void VecVecCToken_add(VecVecCToken *vec, VecCToken to_add)
 		vec->vec = (VecCToken*)realloc(vec->vec, vec->allocated * sizeof(VecCToken));
 	}
 	vec->vec[cur] = to_add;
+}
+
+void VecVecCToken_print(VecVecCToken vec)
+{
+	size_t i;
+
+	for (i = 0; i < vec.count; i++)
+		VecCToken_print(vec.vec[i]);
+}
+
+void VecVecCToken_display(VecVecCToken vec)
+{
+	terminal_flush();
+	VecVecCToken_print(vec);
+	terminal_show();
 }
 
 void VecVecCToken_destroy(VecVecCToken vec)

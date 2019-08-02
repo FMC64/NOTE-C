@@ -140,26 +140,31 @@ StreamCTokenPoly StreamCTokenPoly_initFromCStream(CStream *stream)
 {
 	StreamCTokenPoly res;
 
-	res.isMacro = 0;
+	res.isBufferedStream = 0;
 	res.stream = stream;
 	return res;
 }
 
-StreamCTokenPoly StreamCTokenPoly_initFromCMacro(CMacro *macro)
+StreamCTokenPoly StreamCTokenPoly_initFromStreamCToken(StreamCToken *stream)
 {
 	StreamCTokenPoly res;
 
-	res.isMacro = 1;
-	res.macro = macro;
+	res.isBufferedStream = 1;
+	res.bufferedStream = stream;
 	return res;
 }
 
 int StreamCTokenPoly_poll(StreamCTokenPoly *stream, CToken *pres)
 {
-	if (stream->isMacro)
-		return CMacro_nextToken(stream->macro, pres);
-	else
-		return CStream_poll(stream->stream, pres);
+	int res;
+
+	if (stream->isBufferedStream) {
+		res = StreamCToken_poll(stream->bufferedStream, pres);
+		if (res)
+			*pres = CToken_dup(*pres);
+		return res;
+	} else
+		return CStream_pollToken(stream->stream, pres);
 }
 
 int CStream_create(const char *filepath, CStream **pres)
@@ -256,8 +261,11 @@ static int poll_tokens(CStream *stream, VecCToken *pres)
 				}
 				CToken_destroy(cur);
 			} else if (CStream_canAddToken(stream)){
-				if (!CStream_substituteMacro(stream, cur, &stream->buf, StreamCTokenPoly_initFromCStream(stream), &is_end))
+				if (!CStream_substituteMacro(stream, cur, &stream->buf, StreamCTokenPoly_initFromCStream(stream), &is_end)) {
+					CToken_destroy(cur);
 					return 0;
+				}
+				CToken_destroy(cur);
 				if (is_end)
 					break;
 			} else

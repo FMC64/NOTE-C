@@ -18,7 +18,7 @@ static int define_get_args(StreamCToken *stream, VecStr *pres)
 			VecStr_destroy(res);
 			return 0;
 		}
-		VecStr_add(&res, cur.str);
+		VecStr_add(&res, strdup(cur.str));
 		forceContinue = StreamCToken_pollStr(stream, ",", NULL);
 	}
 	*pres = res;
@@ -161,25 +161,43 @@ CMacro CMacro_dump(void *src)
 	return res;
 }
 
+CMacro CMacro_null(void)
+{
+	CMacro res;
+
+	res.argumentCount = 0;
+	res.argumentBase = NULL;
+	res.argumentCur = NULL;
+	res.tokenBase = NULL;
+	res.tokenCur = NULL;
+	return res;
+}
+
 static int preproc_define(CStream *stream, VecCToken tokens, CContext ctx)
 {
 	CToken name;
 	StreamCToken s = StreamCToken_init(tokens), save;
 	VecStr args = VecStr_init();
+	VecCToken macro_tokens;
 
 	if (!StreamCToken_poll(&s, &name)) {
 		printf_error(ctx, "expected a name for macro definition");
 		return 0;
 	}
-	save = s;
 	if (!CToken_isIdentifier(name)) {
 		printf_error(name.ctx, "expected a valid identifier for macro name");
 		return 0;
 	}
+	save = s;
 	if (!define_get_args(&s, &args))
 		s = save;
-	StrSonic_add(&stream->macros, name.str, 0, CMacro_create(args, StreamCToken_offset(&s).vec));
-	free(args.str);
+	macro_tokens = StreamCToken_offset(&s).vec;
+	if (macro_tokens.count == 0) {
+		s = save;
+		macro_tokens = StreamCToken_offset(&s).vec;
+	}
+	StrSonic_add(&stream->macros, name.str, 0, CMacro_create(args, macro_tokens));
+	VecStr_destroy(args);
 	return 1;
 }
 
@@ -261,38 +279,140 @@ static int resolve_macro(CStream *stream, const char *name, CMacro *pres)
 static int add_token(VecCToken *vec, CToken to_add, int *is_end)
 {
 	*is_end |= CToken_isEndBatch(to_add);
-	VecCToken_add(vec, to_add);
+	VecCToken_add(vec, CToken_dup(to_add));
 	return 1;
+}
+
+static int poll_args(StreamCTokenPoly *to_poll, VecVecCToken *pres, CToken macro, CContext ctx)
+{
+	VecVecCToken res = VecVecCToken_init();
+	VecCToken arg = VecCToken_init();
+	CToken cur;
+	size_t level = 0;
+
+	if (!StreamCTokenPoly_poll(to_poll, &cur)) {
+		printf_error(ctx, "expected arguments for macro '%s'", macro.str);
+		goto poll_args_error;
+	}
+	if (!CToken_streq(cur, "(")) {
+		printf_error(ctx, "expected '(' to begin arguments for '%s'", macro.str);
+		goto poll_args_error;
+	}
+	CToken_destroy(cur);
+	while (1) {
+		if (!StreamCTokenPoly_poll(to_poll, &cur)) {
+			printf_error(ctx, "expected ')' for ending macro arguments for '%s'", macro.str);
+			goto poll_args_error;
+		}
+		if (level == 0) {
+			if (CToken_streq(cur, "("))
+				level++;
+			if (CToken_streq(cur, ")")) {
+				CToken_destroy(cur);
+				VecVecCToken_add(&res, arg);
+				arg = VecCToken_init();
+				break;
+			} else if (CToken_streq(cur, ",")) {
+				CToken_destroy(cur);
+				VecVecCToken_add(&res, arg);
+				arg = VecCToken_init();
+			} else
+				VecCToken_add(&arg, cur);
+		} else {
+			VecCToken_add(&arg, cur);
+			if (CToken_streq(cur, "("))
+				level++;
+			if (CToken_streq(cur, ")")) {	// looks impossible ?
+				if (level == 0) {
+					printf_error(ctx, "misplaced parentheses for macro '%s' arguments (go sub level 0)", macro.str);
+					goto poll_args_error;
+				}
+				level--;
+			}
+		}
+	}
+	*pres = res;
+	return 1;
+
+poll_args_error:
+	VecVecCToken_destroy(res);
+	VecCToken_destroy(arg);
+	return 0;
+}
+
+static int resolve_arg(char *name, void *macroData, VecVecCToken macroArgs, VecCToken *pres)
+{
+	CMacro macro;
+	char *arg;
+	size_t i;
+
+	if (macroData == NULL)
+		return 0;
+	macro = CMacro_dump(macroData);
+	for (i = 0; CMacro_nextArgument(&macro, &arg); i++)
+		if (streq(name, arg)) {
+			*pres = macroArgs.vec[i];
+			return 1;
+		}
+	return 0;
 }
 
 static int substitute_macro_ac(CStream *stream, CToken to_subs, VecCToken *dest, StreamCTokenPoly *to_poll, int *is_end, size_t depth, CContext first_token_ctx)
 {
 	CMacro macro;
-	StreamCTokenPoly macro_stream;
 	CToken cur;
 	CToken new_token;
+	VecVecCToken args = VecVecCToken_init();
+	VecCToken arg;
+	VecCToken macro_tokens = VecCToken_init();
+	StreamCToken macro_stream_ctoken;
+	StreamCTokenPoly macro_stream;
 	size_t limitDepth = 64;
+	size_t i;
 
 	if (depth > limitDepth) {
 		printf_error(first_token_ctx, "too deep macro ! (exceeds level %u)", limitDepth);
-		CToken_destroy(to_subs);
 		return 0;
 	}
 	if (CToken_isString(to_subs))
 		return add_token(dest, to_subs, is_end);
 	if (!resolve_macro(stream, to_subs.str, &macro))
 		return add_token(dest, to_subs, is_end);
-	CToken_destroy(to_subs);
-	macro_stream = StreamCTokenPoly_initFromCMacro(&macro);
-	if (macro.argumentCount > 0) {
-		
+	if (macro.argumentCount > 0)
+		if (!poll_args(to_poll, &args, to_subs, first_token_ctx))
+			return 0;
+	if (args.count != macro.argumentCount) {
+		if (args.count > macro.argumentCount)
+			printf_error(first_token_ctx, "too much arguments for macro '%s' (%u expected, got %u)", to_subs.str, macro.argumentCount, args.count);
+		if (args.count < macro.argumentCount)
+			printf_error(first_token_ctx, "not enough arguments for macro '%s' (%u expected, got %u)", to_subs.str, macro.argumentCount, args.count);
+		VecVecCToken_destroy(args);
+		return 0;
 	}
+
 	while (CMacro_nextToken(&macro, &cur)) {
 		new_token = CToken_dup(cur);
 		new_token.ctx = first_token_ctx;
-		if (!substitute_macro_ac(stream, new_token, dest, &macro_stream, is_end, depth + 1, first_token_ctx))
+		if (resolve_arg(new_token.str, macro.argumentBase, args, &arg)) {
+			for (i = 0; i < arg.count; i++)
+				VecCToken_add(&macro_tokens, CToken_dup(arg.token[i]));
+			CToken_destroy(new_token);
+		} else
+			VecCToken_add(&macro_tokens, new_token);
+	}
+	macro_stream_ctoken = StreamCToken_init(macro_tokens);
+	macro_stream = StreamCTokenPoly_initFromStreamCToken(&macro_stream_ctoken);
+	while (StreamCTokenPoly_poll(&macro_stream, &cur)) {
+		if (!substitute_macro_ac(stream, cur, dest, &macro_stream, is_end, depth + 1, first_token_ctx)) {
+			CToken_destroy(cur);
+			VecCToken_destroy(macro_tokens);
+			VecVecCToken_destroy(args);
 			return 0;
 		}
+		CToken_destroy(cur);
+	}
+	VecCToken_destroy(macro_tokens);
+	VecVecCToken_destroy(args);
 	return 1;
 }
 
