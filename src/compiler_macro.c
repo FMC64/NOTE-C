@@ -179,6 +179,7 @@ static int preproc_define(CStream *stream, VecCToken tokens, CContext ctx)
 	StreamCToken s = StreamCToken_init(tokens), save;
 	VecStr args = VecStr_init();
 	VecCToken macro_tokens;
+	void *to_add;
 
 	if (!StreamCToken_poll(&s, &name)) {
 		printf_error(ctx, "expected a name for macro definition");
@@ -196,14 +197,137 @@ static int preproc_define(CStream *stream, VecCToken tokens, CContext ctx)
 		s = save;
 		macro_tokens = StreamCToken_offset(&s).vec;
 	}
-	StrSonic_add(&stream->macros, name.str, 0, CMacro_create(args, macro_tokens));
+	to_add = CMacro_create(args, macro_tokens);
 	VecStr_destroy(args);
+	if (!StrSonic_add(&stream->macros, name.str, 0, to_add)) {
+		printf_error(ctx, "redefinition of macro '%s'", name.str);
+		return 0;
+	}
+	return 1;
+}
+
+static int is_macro_def(CStream *stream, VecCToken tokens, CContext ctx, int *is_err)
+{
+	*is_err = 0;
+	if (tokens.count != 1) {
+		printf_error(ctx, "this preprocessor directive expects one argument");
+		*is_err = 1;
+		return 0;
+	}
+	if (tokens.token[0].type != CTOKEN_BASIC) {
+		printf_error_part(ctx, "invalid token for this preprocessor directive: ");
+		CToken_print(tokens.token[0]);
+		printf("\n\n");
+		*is_err = 1;
+		return 0;
+	}
+	return StrSonic_resolve(&stream->macros, tokens.token[0].str, NULL, NULL);
+}
+
+static int ifdef(CStream *stream, VecCToken tokens, CContext ctx, int do_rev)
+{
+	int is_err;
+	int status = is_macro_def(stream, tokens, ctx, &is_err) ^ do_rev;
+
+	if (is_err)
+		return 0;
+	VecCMacroStackFrame_add(&stream->macroStack, CMacroStackFrame_init(status, ctx));
+	return 1;
+}
+
+static int preproc_ifdef(CStream *stream, VecCToken tokens, CContext ctx)
+{
+	return ifdef(stream, tokens, ctx, 0);
+}
+
+static int preproc_ifndef(CStream *stream, VecCToken tokens, CContext ctx)
+{
+	return ifdef(stream, tokens, ctx, 1);
+}
+
+static int get_stack_top(VecCMacroStackFrame vec, CContext ctx, CMacroStackFrame **pres)
+{
+	if (vec.count == 0) {
+		printf_error(ctx, "no prepending if block for this preprocessor statement");
+		return 0;
+	}
+	*pres = &vec.stack[vec.count - 1];
+	return 1;
+}
+
+static int elifdef(CStream *stream, VecCToken tokens, CContext ctx, int do_rev)
+{
+	int is_err;
+	int status = is_macro_def(stream, tokens, ctx, &is_err) ^ do_rev;
+	CMacroStackFrame *top;
+
+	if (is_err)
+		return 0;
+	if (!get_stack_top(stream->macroStack, ctx, &top))
+		return 0;
+	if (top->hasElsePassed) {
+		printf_error(ctx, "can't add elseif after else");
+		return 0;
+	}
+	if (top->isCurrent) {
+		top->isCurrent = 0;
+		top->hasPassed = 1;
+	}
+	if (top->hasPassed)
+		return 1;
+	top->isCurrent = status;
+	return 1;
+}
+
+static int preproc_elifdef(CStream *stream, VecCToken tokens, CContext ctx)
+{
+	return elifdef(stream, tokens, ctx, 0);
+}
+
+static int preproc_elifndef(CStream *stream, VecCToken tokens, CContext ctx)
+{
+	return elifdef(stream, tokens, ctx, 1);
+}
+
+static int preproc_else(CStream *stream, VecCToken tokens, CContext ctx)
+{
+	CMacroStackFrame *top;
+
+	if (!get_stack_top(stream->macroStack, ctx, &top))
+		return 0;
+	if (top->hasElsePassed) {
+		printf_error(ctx, "can't add else after else");
+		return 0;
+	}
+	if (top->isCurrent) {
+		top->isCurrent = 0;
+		top->hasPassed = 1;
+	}
+	top->hasElsePassed = 1;
+	if (!top->hasPassed)
+		top->isCurrent = 1;
+	return 1;
+}
+
+static int preproc_endif(CStream *stream, VecCToken tokens, CContext ctx)
+{
+	CMacroStackFrame *top;
+
+	if (!get_stack_top(stream->macroStack, ctx, &top))
+		return 0;
+	VecCMacroStackFrame_deleteLast(&stream->macroStack);
 	return 1;
 }
 
 typedef int (*preproc_fun_t)(CStream*, VecCToken, CContext);
-static const struct {const char *key; preproc_fun_t fun;} str_preproc[] = {
-{"define", &preproc_define},
+static const struct {const char *key; preproc_fun_t fun; int is_flow;} str_preproc[] = {
+{"define", &preproc_define, 0},
+{"ifdef", &preproc_ifdef, 1},
+{"ifndef", &preproc_ifndef, 1},
+{"elifdef", &preproc_elifdef, 1},
+{"elifndef", &preproc_elifndef, 1},
+{"else", &preproc_else, 1},
+{"endif", &preproc_endif, 1},
 {NULL, NULL}};
 
 static StrSonic preprocs;
@@ -218,7 +342,7 @@ int CStream_macro_init(void)
 
 	preprocs = StrSonic_init(&preproc_destroy_cb);
 	for (i = 0; str_preproc[i].key != NULL; i++)
-		if (!StrSonic_add(&preprocs, str_preproc[i].key, 0, str_preproc[i].fun))
+		if (!StrSonic_add(&preprocs, str_preproc[i].key, str_preproc[i].is_flow, str_preproc[i].fun))
 			return 0;
 	return 1;
 }
@@ -232,6 +356,7 @@ int CStream_parseMacro(CStream *stream, CToken macro)
 {
 	VecCToken tokens;
 	CToken name;
+	unsigned char is_flow;
 	preproc_fun_t to_call;
 	int res;
 
@@ -247,18 +372,50 @@ int CStream_parseMacro(CStream *stream, CToken macro)
 		VecCToken_destroy(tokens);
 		return 0;
 	}
-	if (!StrSonic_resolve(&preprocs, name.str, NULL, (void**)&to_call)) {
+	if (!StrSonic_resolve(&preprocs, name.str, &is_flow, (void**)&to_call)) {
+		printf_error(macro.ctx, "can't find preprocessor directive '%s'", name.str);
 		VecCToken_destroy(tokens);
 		return 0;
 	}
+	if (!is_flow)
+		if (!CStream_canAddToken(stream)) {	// discard every non flow preprocessor directive that is out of the condition
+			VecCToken_destroy(tokens);
+			return 1;
+		}
 	res = to_call(stream, VecCToken_offset(tokens, 1), name.ctx);
 	VecCToken_destroy(tokens);
 	return res;
 }
 
+static int VecCMacroStackFrame_isAllCurrent(VecCMacroStackFrame vec)
+{
+	size_t i;
+
+	for (i = 0; i < vec.count; i++)
+		if (!vec.stack[i].isCurrent)
+			return 0;
+	return 1;
+}
+
 int CStream_canAddToken(CStream *stream)
 {
-	return 1;
+	return VecCMacroStackFrame_isAllCurrent(stream->macroStack);
+}
+
+int CStream_ensureMacroStackEmpty(CStream *stream)
+{
+	CMacroStackFrame frame;
+	size_t i;
+
+	if (stream->macroStack.count == 0)
+		return 1;
+	else {
+		for (i = 0; i < stream->macroStack.count; i++) {
+			frame = stream->macroStack.stack[i];
+			printf_error(frame.ctx, "this if block has never been closed");
+		}
+		return 0;
+	}
 }
 
 void StrSonic_CMacro_destroy(unsigned char type, void *data)
@@ -481,14 +638,20 @@ int CStream_substituteMacro(CStream *stream, CToken to_subs, VecCToken *dest, St
 
 // #if 1 -> status = 1
 // #if 0 -> status = 0
-CMacroStackFrame CMacroStackFrame_init(int status)
+CMacroStackFrame CMacroStackFrame_init(int status, CContext ctx)
 {
 	CMacroStackFrame res;
 
 	res.isCurrent = status;
 	res.hasPassed = 0;
 	res.hasElsePassed = 0;
+	res.ctx = CContext_dup(ctx);
 	return res;
+}
+
+void CMacroStackFrame_destroy(CMacroStackFrame frame)
+{
+	CContext_destroy(frame.ctx);
 }
 
 VecCMacroStackFrame VecCMacroStackFrame_init(void)
@@ -506,13 +669,23 @@ void VecCMacroStackFrame_add(VecCMacroStackFrame *vec, CMacroStackFrame to_add)
 	size_t cur = vec->count++;
 
 	if (vec->count > vec->allocated) {
-		vec->allocated + 4;
+		vec->allocated += 4;
 		vec->stack = (CMacroStackFrame*)realloc(vec->stack, vec->allocated * sizeof(CMacroStackFrame));
 	}
 	vec->stack[cur] = to_add;
 }
 
+void VecCMacroStackFrame_deleteLast(VecCMacroStackFrame *vec)
+{
+	vec->count--;
+	CMacroStackFrame_destroy(vec->stack[vec->count]);
+}
+
 void VecCMacroStackFrame_destroy(VecCMacroStackFrame vec)
 {
+	size_t i;
+
+	for (i = 0; i < vec.count; i++)
+		CMacroStackFrame_destroy(vec.stack[i]);
 	free(vec.stack);
 }

@@ -489,7 +489,7 @@ int CFile_readToken(CFile *stream, CToken *pres, int *is_err)
 
 	*is_err = 0;
 	while (stream->buf[s->i] != 0) {
-		if (s->i >= STREAMCTOKEN_BUFSIZE) {
+		if ((s->i >= STREAMCTOKEN_BUFSIZE) && (!stream->isFileDone)) {
 			if (is_quote || isMacro)
 				Str_append(&acc, Str_init(s->i - s->quote_start, &stream->buf[s->quote_start]));
 			if (!CFile_pollFile(stream)) {

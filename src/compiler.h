@@ -162,6 +162,7 @@ int CStream_macro_init(void);
 void CStream_macro_quit(void);
 int CStream_parseMacro(CStream *stream, CToken macro);
 int CStream_canAddToken(CStream *stream);
+int CStream_ensureMacroStackEmpty(CStream *stream);
 void StrSonic_CMacro_destroy(unsigned char type, void *data);
 
 void* CMacro_create(VecStr args, VecCToken tokens);
@@ -174,7 +175,9 @@ CMacro CMacro_null(void);
 
 int CStream_substituteMacro(CStream *stream, CToken to_subs, VecCToken *dest, StreamCTokenPoly to_poll, int *is_end);
 
-CMacroStackFrame CMacroStackFrame_init(int status);
+CMacroStackFrame CMacroStackFrame_init(int status, CContext ctx);
+void CMacroStackFrame_destroy(CMacroStackFrame frame);
 VecCMacroStackFrame VecCMacroStackFrame_init(void);
 void VecCMacroStackFrame_add(VecCMacroStackFrame *vec, CMacroStackFrame to_add);
+void VecCMacroStackFrame_deleteLast(VecCMacroStackFrame *vec);
 void VecCMacroStackFrame_destroy(VecCMacroStackFrame vec);

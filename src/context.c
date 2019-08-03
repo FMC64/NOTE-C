@@ -43,3 +43,17 @@ CContext CContext_polled(CStream *stream)
 	} else
 		return CContext_null();
 }
+
+CContext CContext_dup(CContext src)
+{
+	CContext res;
+
+	res = src;
+	res.file = strdup(src.file);
+	return res;
+}
+
+void CContext_destroy(CContext ctx)
+{
+	free(ctx.file);
+}

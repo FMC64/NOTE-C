@@ -18,3 +18,5 @@ CContext CContext_init(const char *file, int line, int colon);
 CContext CContext_null(void);
 void CContext_print(CContext ctx);
 CContext CContext_polled(CStream *stream);
+CContext CContext_dup(CContext src);
+void CContext_destroy(CContext ctx);

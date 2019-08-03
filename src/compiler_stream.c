@@ -178,6 +178,7 @@ int CStream_create(const char *filepath, CStream **pres)
 	res->streams = VecCFile_init();
 	res->terminatedStreams = VecCFile_init();
 	res->macros = StrSonic_init(&StrSonic_CMacro_destroy);
+	res->macroStack = VecCMacroStackFrame_init();
 	VecCFile_add(&res->streams, file);
 	*pres = res;
 	return 1;
@@ -190,6 +191,7 @@ void CStream_destroy(CStream *stream)
 	VecCFile_destroy(stream->streams);
 	VecCFile_destroy(stream->terminatedStreams);
 	StrSonic_destroy(&stream->macros);
+	VecCMacroStackFrame_destroy(stream->macroStack);
 	free(stream);
 }
 
@@ -332,10 +334,12 @@ int CStream_nextBatch(CStream *stream)
 	if (!get_first_ending_token(stream->buf, &end))
 		if (!feed_tokens(stream))
 			return 0;
-	if (!get_first_ending_token(stream->buf, &end))
-		end = stream->buf.count - 1;
-	VecCToken_moveArea(&stream->buf, 0, end + 1, &stream->tokens.vec);
-	VecCToken_mergeStrings(&stream->tokens.vec);
+	if (stream->buf.count > 0) {
+		if (!get_first_ending_token(stream->buf, &end))
+			end = stream->buf.count - 1;
+		VecCToken_moveArea(&stream->buf, 0, end + 1, &stream->tokens.vec);
+		VecCToken_mergeStrings(&stream->tokens.vec);
+	}
 	return 1;
 }
 

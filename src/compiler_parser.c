@@ -319,6 +319,10 @@ int CParser_exec(const char *path)
 			return 0;
 		}
 	}
+	if (!CStream_ensureMacroStackEmpty(scope->stream)) {
+		CScope_destroy(scope);
+		return 0;
+	}
 	CScope_destroy(scope);
 	return 1;
 }

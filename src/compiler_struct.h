@@ -41,7 +41,7 @@ typedef struct {
 	size_t line_start;
 } CTokenParserState;
 
-#define STREAMCTOKEN_BUFSIZE 512
+#define STREAMCTOKEN_BUFSIZE 256
 
 typedef struct {
 	const char *filepath;
@@ -57,11 +57,25 @@ typedef struct {
 } VecCFile;
 
 typedef struct {
+	int isCurrent;
+	int hasPassed;
+	int hasElsePassed;
+	CContext ctx;
+} CMacroStackFrame;
+
+typedef struct {
+	size_t count;
+	size_t allocated;
+	CMacroStackFrame *stack;
+} VecCMacroStackFrame;
+
+typedef struct {
 	StreamCToken tokens;
 	VecCToken buf;
 	VecCFile streams;
 	VecCFile terminatedStreams;	// flushed on each token polling pass
 	StrSonic macros;
+	VecCMacroStackFrame macroStack;
 } CStream;
 
 typedef struct {
@@ -236,15 +250,3 @@ typedef struct {
 	StreamCToken *bufferedStream;
 	CStream *stream;
 } StreamCTokenPoly;
-
-typedef struct {
-	int isCurrent;
-	int hasPassed;
-	int hasElsePassed;
-} CMacroStackFrame;
-
-typedef struct {
-	size_t count;
-	size_t allocated;
-	CMacroStackFrame *stack;
-} VecCMacroStackFrame;
