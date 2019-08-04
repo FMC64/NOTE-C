@@ -319,6 +319,37 @@ static int preproc_endif(CStream *stream, VecCToken tokens, CContext ctx)
 	return 1;
 }
 
+static int preproc_include(CStream *stream, VecCToken tokens, CContext ctx)
+{
+	CToken cur;
+	char *name;
+	char *path;
+	CFile file;
+
+	if (tokens.count != 1) {
+		printf_error(ctx, "this preprocessor directive takes one argument");
+		return 0;
+	}
+	cur = tokens.token[0];
+	if (cur.type == CTOKEN_STRING_CHEVRON) {
+		name = string_create_from_Str(Str_init_from_CToken(cur));
+		path = strcat_dup("\\\\crd0\\", name);
+		free(name);
+		if (!CFile_create(path, &file)) {
+			free(path);
+			return 0;
+		}
+		free(path);
+		VecCFile_add(&stream->streams, file);
+	} else {
+		printf_error_part(ctx, "invalid token for inclusion: ");
+		CToken_print(cur);
+		printf("\n\n");
+		return 0;
+	}
+	return 1;
+}
+
 typedef int (*preproc_fun_t)(CStream*, VecCToken, CContext);
 static const struct {const char *key; preproc_fun_t fun; int is_flow;} str_preproc[] = {
 {"define", &preproc_define, 0},
@@ -328,6 +359,7 @@ static const struct {const char *key; preproc_fun_t fun; int is_flow;} str_prepr
 {"elifndef", &preproc_elifndef, 1},
 {"else", &preproc_else, 1},
 {"endif", &preproc_endif, 1},
+{"include", &preproc_include, 0},
 {NULL, NULL}};
 
 static StrSonic preprocs;

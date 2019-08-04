@@ -340,18 +340,13 @@ static int parse_variable(CScope *scope)
 		CType_print(type);
 		printf("\n");
 
-		if (name != NULL) {
-			if (CType_primitiveType(type) == CPRIMITIVE_FUNCTION) {
-			// functions are skipped and no prototype checking is done for now
-			}
-			free(name);
-			CType_destroy(type);
-			VecStr_destroy(args);
-		} else {
-			free(name);
-			CType_destroy(type);
-			VecStr_destroy(args);
+		if (CType_primitiveType(type) == CPRIMITIVE_FUNCTION) {
+		// functions are skipped and no prototype checking is done for now
 		}
+		free(name);
+		CType_destroy(type);
+		VecStr_destroy(args);
+
 		if (!CStream_nextBatch(scope->stream))
 			return 0;
 	} else if (CToken_streq(cur, "=")) {
@@ -419,7 +414,6 @@ int CParser_exec(const char *path)
 		CScope_destroy(scope);
 		return 0;
 	}
-	VecCToken_print(scope->stream->tokens.vec);
 	while (!CStream_isEof(scope->stream)) {
 		if (CKeyword_at(scope, &keyword, NULL)) {
 			switch (keyword) {

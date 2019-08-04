@@ -118,7 +118,7 @@ void terminal_show(void)
 		}
 
 		ML_display_vram();
-		Sleep(100);
+		Sleep(33);
 	}
 	return;
 }

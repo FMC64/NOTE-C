@@ -647,7 +647,7 @@ static int poll_function(CScope *scope, CTypeFull *pres, VecStr *pargsName)
 			VecStr_destroy(args);
 			return 0;
 		}
-		if (CType_primitiveType(type) != CPRIMITIVE_VOID) {
+		if (!((CType_primitiveType(type) == CPRIMITIVE_VOID) && (CType_refCount(type) == 0))) {
 			CFunction_addArg(pres->primitive.data, type);
 			VecStr_add(&args, name);
 		}
@@ -748,6 +748,8 @@ int CTypeFull_parse(CScope *scope, char **pname, CType **ptypeUsed, CTypeFull **
 	*pres = res;
 	return 1;
 
+	free(*pname);
+	*pname = NULL;
 	CTypeFull_parse_error:
 	CTypeFull_destroy(res);
 	return 0;
