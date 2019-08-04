@@ -138,7 +138,6 @@ CType* CType_alloc(CType base);
 CType CType_fromFull(CTypeFull *full);
 CPrimitiveType CType_primitiveType(CType type);
 void* CType_primitiveData(CType type);
-size_t CType_referenceLevel(CType type);
 void CType_destroy(CType type);
 
 CTypeFull* CTypeFull_createPrimitive(CPrimitiveType type, size_t bits);
@@ -148,11 +147,11 @@ void CFunction_destroy(CFunction *func);
 int CVariable_parse(CScope *scope, CVariable **pres, VecStr *pargs);
 void CVariable_destroy(CVariable *variable);
 
-int CTypeFull_parse(CScope *scope, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName);
+int CTypeFull_parse(CScope *scope, char **pname, CType **ptypeUsed, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName);
 int CType_parseFull(CScope *scope, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName);
 int CType_parse(CScope *scope, CType *pres);
 int CType_parseName(CScope *scope, char **pname, CType *pres);
-void CType_shrink(CScope *scope, CType *to_shrink);
+void CType_shrink(CScope *scope, CType *to_shrink, CType *typeUsed);
 
 CTypeFull* CTypeFull_alloc(CTypeFull base);
 void CType_print_tree(CType type);

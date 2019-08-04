@@ -187,17 +187,22 @@ typedef struct {
 typedef struct {
 	int isUndef;
 	size_t size;
-} CArrayColumn;
+} CArray;
 
 typedef struct {
 	unsigned short level;		// Can't go much shorter because of 32 bits alignment
 	unsigned short arrayCount;
-	CArrayColumn *array;
+	CArray *array;
 } CReference;
+
+typedef struct {
+	size_t count;
+	CReference *ref;
+} VecCReference;
 
 typedef struct CTypeFull {
 	CTypeFlag flags;
-	CReference ref;
+	VecCReference refs;
 	CPrimitive primitive;
 } CTypeFull;
 
@@ -212,7 +217,8 @@ typedef enum {
 typedef struct {
 	size_t flags : 2;	// CTypeFlag
 	size_t isTypeNamed : 1;
-	size_t referenceLevel : 29;
+	size_t isReferenceSimple : 1;
+	size_t referenceLevel : 28;
 	CTypeFull *full;
 } CType;
 

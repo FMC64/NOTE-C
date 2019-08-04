@@ -1,7 +1,17 @@
 
 #include "headers.h"
 
-CReference CReference_default(void)
+static CReference CReference_init(size_t level)
+{
+	CReference res;
+
+	res.level = level;
+	res.arrayCount = 0;
+	res.array = NULL;
+	return res;
+}
+
+static CReference CReference_default(void)
 {
 	CReference res;
 
@@ -11,9 +21,44 @@ CReference CReference_default(void)
 	return res;
 }
 
-void CReference_destroy(CReference reference)
+static void CReference_destroy(CReference reference)
 {
 	free(reference.array);
+}
+
+static VecCReference VecCReference_init(void)
+{
+	VecCReference res;
+
+	res.count = 0;
+	res.ref = NULL;
+	return res;
+}
+
+static void VecCReference_add(VecCReference *vec, CReference to_add)
+{
+	size_t cur = vec->count++;
+
+	vec->ref = (CReference*)realloc(vec->ref, vec->count * sizeof(CReference));
+	vec->ref[cur] = to_add;
+}
+
+static void VecCReference_destroy(VecCReference vec)
+{
+	size_t i;
+
+	for (i = 0; i < vec.count; i++)
+		CReference_destroy(vec.ref[i]);
+	free(vec.ref);
+}
+
+static void VecCReference_blendInto(VecCReference *dst, VecCReference to_delete)
+{
+	size_t i;
+
+	for (i = 0; i < to_delete.count; i++)
+		VecCReference_add(dst, to_delete.ref[i]);
+	free(to_delete.ref);
 }
 
 CPrimitive CPrimitive_default(void)
@@ -46,6 +91,7 @@ static CType CType_default(void)
 
 	res.flags = CTYPE_NONE;
 	res.isTypeNamed = 0;
+	res.isReferenceSimple = 0;
 	res.referenceLevel = 0;
 	res.full = NULL;
 	return res;
@@ -64,6 +110,7 @@ CType CType_fromFull(CTypeFull *full)
 	CType res = CType_default();
 
 	res.full = full;
+	res.flags = full->flags;
 	return res;
 }
 
@@ -77,9 +124,20 @@ void* CType_primitiveData(CType type)
 	return type.full->primitive.data;
 }
 
-size_t CType_referenceLevel(CType type)
+size_t CType_refCount(CType type)
 {
-	return type.referenceLevel + type.full->ref.level;
+	if (type.isReferenceSimple)
+		return type.referenceLevel > 0;
+	else
+		return type.full->refs.count;
+}
+
+CReference CType_refAt(CType type, size_t index)
+{
+	if (type.isReferenceSimple)
+		return CReference_init(type.referenceLevel);
+	else
+		return type.full->refs.ref[index];
 }
 
 void CType_destroy(CType type)
@@ -93,7 +151,7 @@ CTypeFull CTypeFull_default(void)
 	CTypeFull res;
 
 	res.flags = 0;
-	res.ref = CReference_default();
+	res.refs = VecCReference_init();
 	res.primitive = CPrimitive_default();
 	return res;
 }
@@ -391,9 +449,37 @@ static int poll_struct(CScope *scope, CPrimitive *pres)
 	return 1;
 }
 
-static int poll_primitive(CScope *scope, CPrimitive *pres)
+static int resolve_type(CScope *scope, CToken type, CType **pres)
+{
+	CSymbol sym;
+
+	if (type.type != CTOKEN_BASIC)
+		return 0;
+	if (!CScope_resolve(scope, type.str, &sym))
+		return 0;
+	if (sym.type != CSYMBOL_TYPE)
+		return 0;
+	*pres = sym.data;
+	return 1;
+}
+
+static void blend_type(CType *src, CTypeFull *dst)
+{
+	size_t refCount;
+	size_t i;
+
+	dst->flags |= src->flags;
+	refCount = CType_refCount(*src);
+	for (i = 0; i < refCount; i++)
+		VecCReference_add(&dst->refs, CType_refAt(*src, i));
+	dst->primitive = src->full->primitive;
+	dst->primitive.isDataNamed = 1;
+}
+
+static int poll_primitive(CScope *scope, CPrimitive *pres, CType **ptypeUsed, CTypeFull *targetType)
 {
 	CKeyword keyword;
+	CToken typeToken;
 	CPrimitiveFlag flags = 0;
 	size_t longCount = 0;
 	CPrimitiveFlag flag;
@@ -406,6 +492,12 @@ static int poll_primitive(CScope *scope, CPrimitive *pres)
 			return poll_struct(scope, pres);
 		}
 	}
+	if (CStream_at(scope->stream, &typeToken))
+		if (resolve_type(scope, typeToken, ptypeUsed)) {
+			blend_type(*ptypeUsed, targetType);
+			CStream_forward(scope->stream);
+			return;
+		}
 	while (CKeyword_poll(scope, &keyword, &ctx)) {
 		if (keyword == CKEYWORD_LONG) {
 			longCount++;
@@ -480,19 +572,22 @@ static size_t poll_reference_level(CStream *tokens)
 	return res;
 }
 
-static int poll_reference(CStream *tokens, char **pname, CReference *acc)
+static int poll_reference(CStream *tokens, char **pname, VecCReference *acc)
 {
 	CToken cur;
+	CReference ref = CReference_default();
 
-	if (pname != NULL)
-		*pname = NULL;
-	acc->level += poll_reference_level(tokens);
+	ref.level = poll_reference_level(tokens);
 	if (pname != NULL)
 		if (CStream_at(tokens, &cur))
 			if (str_is_identifier(cur.str)) {
+				if (*pname != NULL)
+					free(*pname);
 				*pname = strdup(cur.str);
 				CStream_forward(tokens);
 			}
+	if ((ref.level > 0) || (ref.arrayCount > 0))
+		VecCReference_add(acc, ref);
 	return 1;
 }
 
@@ -523,22 +618,22 @@ void CFunction_destroy(CFunction *func)
 	free(func);
 }
 
-static CTypeFull* CTypeFull_initFunction(CScope *scope, CTypeFull *returnType, CReference funReference)
+static CTypeFull* CTypeFull_initFunction(CScope *scope, CTypeFull *returnType, VecCReference funReference, CType *typeUsed)
 {
 	CTypeFull res = CTypeFull_default();
 	CFunction fun;
 
 	fun.returnType = CType_fromFull(returnType);
-	CType_shrink(scope, &fun.returnType);
+	CType_shrink(scope, &fun.returnType, typeUsed);
 	fun.argCount = 0;
 	fun.arg = NULL;
-	res.ref = funReference;
+	res.refs = funReference;
 	res.primitive.type = CPRIMITIVE_FUNCTION;
 	res.primitive.data = CFunction_alloc(fun);
 	return CTypeFull_alloc(res);
 }
 
-static int poll_function(CScope *scope, int hasPolled, CTypeFull *pres, VecStr *pargsName)
+static int poll_function(CScope *scope, CTypeFull *pres, VecStr *pargsName)
 {
 	CType type;
 	VecStr args = VecStr_init();
@@ -547,11 +642,6 @@ static int poll_function(CScope *scope, int hasPolled, CTypeFull *pres, VecStr *
 	int forceContinue = 0;
 	char *name;
 
-	if (!hasPolled)
-		if (!CStream_pollLpar(scope->stream, &ctx)) {
-			printf_error(ctx, "missing '(' for declaring function arguments");
-			return 0;
-		}
 	while ((!CStream_pollRpar(scope->stream, &ctx)) || forceContinue) {
 		if (!CType_parseFull(scope, &name, &type, NULL, NULL)) {
 			VecStr_destroy(args);
@@ -591,7 +681,8 @@ static CVariable* CVariable_alloc(CVariable base)
 
 int CVariable_parse(CScope *scope, CVariable **pres, VecStr *pargs)
 {
-	CVariable *res = CVariable_alloc(CVariable_default());
+	return 0;
+	/*CVariable *res = CVariable_alloc(CVariable_default());
 	char *name;
 
 	if (!CTypeFull_parse(scope, &res->name, &res->type.full, &res->storage, pargs)) {
@@ -599,7 +690,7 @@ int CVariable_parse(CScope *scope, CVariable **pres, VecStr *pargs)
 		return 0;
 	}
 	*pres = res;
-	return 1;
+	return 1;*/
 }
 
 void CVariable_destroy(CVariable *variable)
@@ -617,40 +708,43 @@ CTypeFull* CTypeFull_alloc(CTypeFull base)
 	return res;
 }
 
-int CTypeFull_parse(CScope *scope, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName)
+int CTypeFull_parse(CScope *scope, char **pname, CType **ptypeUsed, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName)
 {
 	CTypeFull *res = CTypeFull_alloc(CTypeFull_default());
-	int isFun = 0;
-	int hasPolled;
-	CReference funRef = CReference_default();
+	int isPar;
+	int isFun;
+	VecCReference funRef;
 	CContext ctx;
 
 	*pname = NULL;
+	*ptypeUsed = NULL;
 	if (pargsName != NULL)
 		*pargsName = VecStr_init();
 	if (!poll_attributes(scope, &res->flags, pstorage))
 		goto CTypeFull_parse_error;
-	if (!poll_primitive(scope, &res->primitive))
+	if (!poll_primitive(scope, &res->primitive, ptypeUsed, res))
 		goto CTypeFull_parse_error;
-	if (!poll_reference(scope->stream, NULL, &res->ref))
+	if (!poll_reference(scope->stream, NULL, &res->refs))
 		goto CTypeFull_parse_error;
-	isFun = CStream_pollLpar(scope->stream, NULL);
-	if (!poll_reference(scope->stream, pname, &funRef))
-		goto CTypeFull_parse_error;
-	if (isFun)
-		if (!CStream_pollRpar(scope->stream, &ctx)) {
-			printf_error(ctx, "missing ')' for closing function name");
+	do {
+		funRef = VecCReference_init();
+		isPar = CStream_pollLpar(scope->stream, NULL);
+		if (!poll_reference(scope->stream, pname, &funRef))
 			goto CTypeFull_parse_error;
-		}
-	hasPolled = CStream_pollLpar(scope->stream, NULL);
-	if (hasPolled || isFun) {
-		res = CTypeFull_initFunction(scope, res, funRef);
-		if (!poll_function(scope, hasPolled, res, pargsName))
-			goto CTypeFull_parse_error;
-	}
-	if (*pname == NULL)
-		if (!poll_reference(scope->stream, pname, &res->ref))
-			goto CTypeFull_parse_error;
+		if (isPar)
+			if (!CStream_pollRpar(scope->stream, &ctx)) {
+				printf_error(ctx, "expected ) for closing name");
+				goto CTypeFull_parse_error;
+			}
+		isFun = CStream_pollLpar(scope->stream, NULL);
+		if (isFun) {
+			res = CTypeFull_initFunction(scope, res, funRef, *ptypeUsed);
+			*ptypeUsed = NULL;
+			if (!poll_function(scope, res, pargsName))
+				goto CTypeFull_parse_error;
+		} else
+			VecCReference_blendInto(&res->refs, funRef);
+	} while (isFun);
 	*pres = res;
 	return 1;
 
@@ -674,21 +768,27 @@ static int VecCTypeFull_searchPrimitive(VecCTypeFull *vec, size_t bits, CTypeFul
 static void finish_shrink(CTypeFull *from, CTypeFull *to, CType *shrinked)
 {
 	shrinked->flags = from->flags;
-	shrinked->referenceLevel = from->ref.level - to->ref.level;
+	shrinked->isReferenceSimple = 1;
+	shrinked->referenceLevel = 0;
+	if (from->refs.count > 0)
+		shrinked->referenceLevel = from->refs.ref[0].level;
 	shrinked->isTypeNamed = 1;
 	shrinked->full = to;
 	CTypeFull_destroy(from);
 }
 
-void CType_shrink(CScope *scope, CType *to_shrink)
+void CType_shrink(CScope *scope, CType *to_shrink, CType *typeUsed)
 {
 	CTypeFull *full = to_shrink->full;
 	CTypeFull *found;
 
 	if (to_shrink->isTypeNamed)
 		return;
-	if (full->ref.arrayCount > 0)
+	if (full->refs.count > 1)
 		return;
+	if (full->refs.count == 1)
+		if (full->refs.ref[0].arrayCount > 0)
+			return;
 	switch (full->primitive.type) {
 	case CPRIMITIVE_VOID:
 		finish_shrink(full, (CTypeFull*)scope->cachedTypes.t_void, to_shrink);
@@ -708,16 +808,21 @@ void CType_shrink(CScope *scope, CType *to_shrink)
 			return;
 		finish_shrink(full, found, to_shrink);
 		return;
+	default:
+		if (typeUsed != NULL)
+			finish_shrink(full, typeUsed->full, to_shrink);
+		return;
 	}
 }
 
 int CType_parseFull(CScope *scope, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName)
 {
 	CType res = CType_default();
+	CType *typeUsed;
 
-	if (!CTypeFull_parse(scope, pname, &res.full, pstorage, pargsName))
+	if (!CTypeFull_parse(scope, pname, &typeUsed, &res.full, pstorage, pargsName))
 		return 0;
-	CType_shrink(scope, &res);
+	CType_shrink(scope, &res, typeUsed);
 	*pres = res;
 	return 1;
 }
@@ -783,16 +888,7 @@ static void CTypeFull_print_tree(CTypeFull *type, size_t depth)
 	print_tabs(depth);
 	printf("flags: %d\n", type->flags);
 	print_tabs(depth);
-	printf("refLevel: %u\n", type->ref.level);
-	print_tabs(depth);
-	printf("array (%u): ", type->ref.arrayCount);
-	for (i = 0; i < type->ref.arrayCount; i++) {
-		if (type->ref.array[i].isUndef)
-			printf("[]");
-		else
-			printf("[%u]", type->ref.array[i].size);
-	}
-	printf("\n");
+	printf("refCount: %u\n", type->refs.count);
 	print_tabs(depth);
 	printf("Primitive: ");
 	switch (type->primitive.type) {
@@ -823,7 +919,9 @@ static void CType_print_tree_actual(CType type, size_t depth)
 	print_tabs(depth);
 	printf("isTypeNamed: %u\n", type.isTypeNamed);
 	print_tabs(depth);
-	printf("refLevel: %u\n", type.referenceLevel);
+	printf("isReferenceSimple: %u\n", type.isReferenceSimple);
+	print_tabs(depth);
+	printf("referenceLevel: %u\n", type.referenceLevel);
 	CTypeFull_print_tree(type.full, depth + 1);
 }
 
@@ -882,16 +980,22 @@ static void print_primitive_num(CPrimitiveType type, size_t bytes)
 
 static void print_reference(CType type)
 {
-	size_t level = CType_referenceLevel(type);
+	size_t refCount = CType_refCount(type);
+	size_t level;
 	size_t i;
+	size_t j;
+	CReference ref;
 
-	for (i = 0; i < level; i++)
-		printf("*");
-	for (i = 0; i < type.full->ref.arrayCount; i++) {
-		printf("[");
-		if (!type.full->ref.array[i].isUndef)
-			printf("%u", type.full->ref.array[i].size);
-		printf("]");
+	for (j = 0; j < refCount; j++) {
+		ref = CType_refAt(type, refCount - 1 - j);
+		for (i = 0; i < ref.level; i++)
+			printf("*");
+		for (i = 0; i < ref.arrayCount; i++) {
+			printf("[");
+			if (!ref.array[i].isUndef)
+				printf("%u", ref.array[i].size);
+			printf("]");
+		}
 	}
 }
 
@@ -933,7 +1037,7 @@ void CTypeFull_destroy(CTypeFull *type)
 {
 	if (type == NULL)
 		return;
-	CReference_destroy(type->ref);
+	VecCReference_destroy(type->refs);
 	CPrimitive_destroy(type->primitive);
 	free(type);
 }
@@ -1076,7 +1180,6 @@ int poll_struct_members(CScope *scope, CStruct *s)
 			CType_destroy(type);
 			return 0;
 		}
-		//VecCToken_display(StreamCToken_offset(&scope->stream.tokens).vec);
 		if (!CStream_expectSemicolon(scope->stream))
 			return 0;
 	}

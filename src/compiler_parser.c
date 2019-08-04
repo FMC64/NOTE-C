@@ -439,10 +439,6 @@ int CParser_exec(const char *path)
 		} else if (!parse_variable(scope)) {
 			CScope_destroy(scope);
 			return 0;
-		} else {
-			print_error_unexp_token_at(scope);
-			CScope_destroy(scope);
-			return 0;
 		}
 		if (CStream_isEof(scope->stream))
 			break;
