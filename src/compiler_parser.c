@@ -230,6 +230,9 @@ void CSymbol_destroy(CSymbol symbol)
 		CType_destroy(*(CType*)symbol.data);
 		free(symbol.data);
 		return;
+	case CSYMBOL_STRUCT:
+		CStruct_destroy(symbol.data);
+		return;
 	}
 }
 
@@ -332,24 +335,25 @@ static int parse_variable(CScope *scope)
 		return 0;
 	}
 	if (CToken_streq(cur, ";")) {
-		if (CType_primitiveType(type) == CPRIMITIVE_FUNCTION) {
-			printf("prototype %s: ", name);
-			CType_print(type);
-			printf("\n");
+		if (name != NULL)
+			printf("var %s: ", name);
+		CType_print(type);
+		printf("\n");
 
-			free(name);
-			CType_destroy(type);
-			VecStr_destroy(args);
+		if (name != NULL) {
+			if (CType_primitiveType(type) == CPRIMITIVE_FUNCTION) {
 			// functions are skipped and no prototype checking is done for now
-			if (!CStream_nextBatch(scope->stream))
-				return 0;
-		} else {
-			printf_error(cur.ctx, "unsupported type for now");
+			}
 			free(name);
 			CType_destroy(type);
 			VecStr_destroy(args);
-			return 0;
+		} else {
+			free(name);
+			CType_destroy(type);
+			VecStr_destroy(args);
 		}
+		if (!CStream_nextBatch(scope->stream))
+			return 0;
 	} else if (CToken_streq(cur, "=")) {
 		printf_error(cur.ctx, "unsupported assignment for now");
 		free(name);
@@ -376,16 +380,31 @@ static int parse_variable(CScope *scope)
 	return 1;
 }
 
-static int expect_semicolon(CScope *scope)
+static int parse_typedef(CScope *scope)
 {
+	char *name;
+	CType type;
 	CToken cur;
 
-	if (!CStream_poll(scope->stream, &cur)) {
-		printf_error(CStream_lastCtx(scope->stream), "expected ;");
+	if (!CStream_poll(scope->stream, &cur))
+		return 0;
+	if (!CType_parseName(scope, &name, &type))
+		return 0;
+	if (!CStream_expectSemicolon(scope->stream)) {
+		free(name);
+		CType_destroy(type);
 		return 0;
 	}
-	if (!CStream_nextBatch(scope->stream))
+	if (!add_type(scope, name, type, cur.ctx)) {
+		free(name);
+		CType_destroy(type);
 		return 0;
+	}
+
+	printf("type %s: ", name);
+	free(name);
+	CType_print(type);
+	printf("\n");
 	return 1;
 }
 
@@ -393,9 +412,6 @@ int CParser_exec(const char *path)
 {
 	CScope *scope;
 	CKeyword keyword;
-	char *name;
-	CType type;
-	CContext ctx;
 
 	if (!CScope_create(path, &scope))
 		return 0;
@@ -405,44 +421,21 @@ int CParser_exec(const char *path)
 	}
 	VecCToken_print(scope->stream->tokens.vec);
 	while (!CStream_isEof(scope->stream)) {
-		if (CKeyword_at(scope, &keyword, &ctx)) {
-			ctx = CContext_dup(ctx);
+		if (CKeyword_at(scope, &keyword, NULL)) {
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
-				CStream_forward(scope->stream);
-				if (!CType_parseFull(scope, &name, &type, NULL, NULL)) {
-					CContext_destroy(ctx);
+				if (!parse_typedef(scope)) {
 					CScope_destroy(scope);
 					return 0;
 				}
-				if (!expect_semicolon(scope)) {
-					free(name);
-					CContext_destroy(ctx);
-					CType_destroy(type);
-					CScope_destroy(scope);
-					return 0;
-				}
-				if (!add_type(scope, name, type, ctx)) {
-					free(name);
-					CContext_destroy(ctx);
-					CType_destroy(type);
-					CScope_destroy(scope);
-					return 0;
-				}
-				printf("type %s: ", name);
-				free(name);
-				CType_print(type);
-				printf("\n");
 				break;
 			default:
 				if (!parse_variable(scope)) {
-					CContext_destroy(ctx);
 					CScope_destroy(scope);
 					return 0;
 				}
 				break;
 			}
-			CContext_destroy(ctx);
 		} else if (!parse_variable(scope)) {
 			CScope_destroy(scope);
 			return 0;

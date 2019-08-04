@@ -91,6 +91,7 @@ typedef struct {
 typedef enum {
 	CSYMBOL_NONE,
 	CSYMBOL_KEYWORD,
+	CSYMBOL_STRUCT,
 	CSYMBOL_VARIABLE,
 	CSYMBOL_TYPE
 } CSymbolType;

@@ -56,6 +56,15 @@ int streq_part_max(const char *str, const char *part, size_t *pmax)
 	}
 }
 
+char* strcat_dup(const char *a, const char *b)
+{
+	char *res = (char*)malloc(strlen(a) + strlen(b) + 1);
+
+	strcpy(res, a);
+	strcat(res, b);
+	return res;
+}
+
 Str Str_empty(void)
 {
 	Str res;

@@ -33,7 +33,10 @@ void CPrimitive_destroy(CPrimitive primitive)
 	switch (primitive.type) {
 	case CPRIMITIVE_FUNCTION:
 		CFunction_destroy(primitive.data);
-		break;
+		return;
+	case CPRIMIVITE_STRUCT:
+		CStruct_destroy(primitive.data);
+		return;
 	}
 }
 
@@ -101,6 +104,7 @@ CTypeFull* CTypeFull_createPrimitive(CPrimitiveType type, size_t bits)
 
 	res.primitive.type = type;
 	res.primitive.data = (void*)bits;
+	res.primitive.isDataNamed = 0;
 	return CTypeFull_alloc(res);
 }
 
@@ -374,6 +378,19 @@ static CPrimitiveType get_int_primitive_type(CPrimitiveFlag flags)
 		return CPRIMITIVE_SINT;
 }
 
+static int poll_struct(CScope *scope, CPrimitive *pres)
+{
+	CStruct *s;
+
+	if (!CStruct_parse(scope, &s))
+		return 0;
+	pres->data = s;
+	pres->type = CPRIMIVITE_STRUCT;
+	pres->isDataNamed = s->name != NULL;
+	if (!pres->isDataNamed)
+	return 1;
+}
+
 static int poll_primitive(CScope *scope, CPrimitive *pres)
 {
 	CKeyword keyword;
@@ -382,6 +399,13 @@ static int poll_primitive(CScope *scope, CPrimitive *pres)
 	CPrimitiveFlag flag;
 	CContext ctx;
 
+	if (CKeyword_at(scope, &keyword, NULL)) {
+		switch (keyword) {
+		case CKEYWORD_STRUCT:
+		case CKEYWORD_UNION:
+			return poll_struct(scope, pres);
+		}
+	}
 	while (CKeyword_poll(scope, &keyword, &ctx)) {
 		if (keyword == CKEYWORD_LONG) {
 			longCount++;
@@ -464,12 +488,11 @@ static int poll_reference(CStream *tokens, char **pname, CReference *acc)
 		*pname = NULL;
 	acc->level += poll_reference_level(tokens);
 	if (pname != NULL)
-		if (CStream_poll(tokens, &cur)) {
-			if (str_is_identifier(cur.str))
+		if (CStream_at(tokens, &cur))
+			if (str_is_identifier(cur.str)) {
 				*pname = strdup(cur.str);
-			else
-				CStream_back(tokens);
-		}
+				CStream_forward(tokens);
+			}
 	return 1;
 }
 
@@ -707,6 +730,11 @@ int CType_parse(CScope *scope, CType *pres)
 		return 0;
 	free(name);
 	return 1;
+}
+
+int CType_parseName(CScope *scope, char **pname, CType *pres)
+{
+	return CType_parseFull(scope, pname, pres, NULL, NULL);
 }
 
 static void print_tabs(size_t count)
@@ -990,20 +1018,88 @@ static int CStruct_addMember(CStruct *s, CStructMember to_add, CContext ctx)
 	return 1;
 }
 
-int CStruct_parse(CScope *scope, int isUnion, CStruct **pres, CContext ctx)
+static int get_is_union(CScope *scope)
+{
+	CKeyword cur;
+
+	if (!CKeyword_poll(scope, &cur, NULL))
+		return 0;
+	return cur == CKEYWORD_UNION;
+}
+
+static int struct_resolve_entry(CScope *scope, CStruct **s, CContext ctx)
+{
+	CSymbol sym;
+	char *name = strcat_dup((*s)->isUnion ? "union " : "struct ", (*s)->name);
+
+	if (CScope_resolve(scope, name, &sym))
+		if (sym.type == CSYMBOL_STRUCT)
+			if (((CStruct*)sym.data)->isUnion == (*s)->isUnion) {
+				free(name);
+				CStruct_destroy(*s);
+				*s = sym.data;
+				return 1;
+			}
+	if (!CScope_addSymbol(scope, name, CSymbol_init(CSYMBOL_STRUCT, *s), ctx)) {
+		free(name);
+		return 0;
+	}
+	free(name);
+	return 1;
+}
+
+int poll_struct_members(CScope *scope, CStruct *s)
+{
+	CType type;
+	char *name;
+	CToken cur;
+
+	CStream_forward(scope->stream);
+	while (1) {
+		if (!CStream_at(scope->stream, &cur)) {
+			printf_error(cur.ctx, "expected %s members after {", CStruct_type(s));
+			return 0;
+		}
+		if (CToken_streq(cur, "}")) {
+			CStream_forward(scope->stream);
+			break;
+		}
+		if (!CType_parseName(scope, &name, &type))
+			return 0;
+		if (name == NULL) {
+			printf_error(CStream_atCtx(scope->stream), "expected a name for %s member", CStruct_type(s));
+			CType_destroy(type);
+			return 0;
+		}
+		if (!CStruct_addMember(s, CStructMember_init(name, s->isUnion ? 0 : 0, type), CStream_atCtx(scope->stream))) {
+			free(name);
+			CType_destroy(type);
+			return 0;
+		}
+		//VecCToken_display(StreamCToken_offset(&scope->stream.tokens).vec);
+		if (!CStream_expectSemicolon(scope->stream))
+			return 0;
+	}
+	return 1;
+}
+
+int CStruct_parse(CScope *scope, CStruct **pres)
 {
 	CStruct *res = CStruct_alloc(CStruct_default());
 	CToken cur;
 
-	res->isUnion = isUnion;
-	if (!CStream_poll(scope->stream, &cur)) {
-		printf_error(ctx, "expected %s name or {", CStruct_type(res));
+	res->isUnion = get_is_union(scope);
+	if (!CStream_at(scope->stream, &cur)) {
+		printf_error(cur.ctx, "expected %s name or {", CStruct_type(res));
 		CStruct_destroy(res);
 		return 0;
 	}
 	if (CToken_isIdentifier(cur)) {
 		res->name = strdup(cur.str);
-		if (!CStream_poll(scope->stream, &cur)) {
+		if (!struct_resolve_entry(scope, &res, cur.ctx))
+			return 0;
+		CStream_forward(scope->stream);
+		if (!CStream_at(scope->stream, &cur)) {
 			*pres = res;
 			return 1;
 		}
@@ -1012,11 +1108,17 @@ int CStruct_parse(CScope *scope, int isUnion, CStruct **pres, CContext ctx)
 		*pres = res;
 		return 1;
 	}
-	if (!CStream_poll(scope->stream, &cur)) {
-		printf_error(cur.ctx, "expected %s members after {", CStruct_type(res));
-		CStruct_destroy(res);
+	if (res->isDefined) {
+		printf_error(cur.ctx, "redefinition of %s %s", CStruct_type(res), CStruct_name(res));
 		return 0;
 	}
+	res->isDefined = 1;
+	if (!poll_struct_members(scope, res)) {
+		if (res->name == NULL)
+			CStruct_destroy(res);
+		return 0;
+	}
+	*pres = res;
 	return 1;
 }
 

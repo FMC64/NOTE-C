@@ -5,6 +5,7 @@ char* strdup(const char *src);
 int streq(const char *a, const char *b);
 int streq_part(const char *str, const char *part);
 int streq_part_max(const char *str, const char *part, size_t *pmax);
+char* strcat_dup(const char *a, const char *b);
 
 Str Str_empty(void);
 Str Str_init(size_t size, char *data);

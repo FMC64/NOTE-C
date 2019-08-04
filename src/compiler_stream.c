@@ -345,7 +345,24 @@ int CStream_nextBatch(CStream *stream)
 
 int CStream_isEof(CStream *stream)
 {
-	return (!StreamCToken_at(stream, NULL)) && (stream->buf.count == 0) && (stream->streams.size == 0);
+	return (!StreamCToken_at(&stream->tokens, NULL)) && (stream->buf.count == 0) && (stream->streams.size == 0);
+}
+
+int CStream_expectSemicolon(CStream *stream)
+{
+	CToken cur;
+
+	if (!CStream_poll(stream, &cur)) {
+		printf_error(CStream_lastCtx(stream), "expected ;");
+		return 0;
+	}
+	if (!CToken_streq(cur, ";")) {
+		printf_error(cur.ctx, "expected ;");
+		return 0;
+	}
+	if (!CStream_nextBatch(stream))
+		return 0;
+	return 1;
 }
 
 StreamCToken StreamCToken_init(VecCToken vec)

@@ -52,6 +52,7 @@ int CStream_currentStream(CStream *stream, CFile **pres);
 int CStream_pollToken(CStream *stream, CToken *pres, int *is_err);
 int CStream_nextBatch(CStream *stream);
 int CStream_isEof(CStream *stream);
+int CStream_expectSemicolon(CStream *stream);
 StreamCToken StreamCToken_init(VecCToken vec);
 void StreamCToken_flush(StreamCToken *stream);
 StreamCToken StreamCToken_offset(StreamCToken *stream);
@@ -150,6 +151,7 @@ void CVariable_destroy(CVariable *variable);
 int CTypeFull_parse(CScope *scope, char **pname, CTypeFull **pres, CStorageType *pstorage, VecStr *pargsName);
 int CType_parseFull(CScope *scope, char **pname, CType *pres, CStorageType *pstorage, VecStr *pargsName);
 int CType_parse(CScope *scope, CType *pres);
+int CType_parseName(CScope *scope, char **pname, CType *pres);
 void CType_shrink(CScope *scope, CType *to_shrink);
 
 CTypeFull* CTypeFull_alloc(CTypeFull base);
@@ -159,6 +161,7 @@ void CTypeFull_destroy(CTypeFull *type);
 
 const char* CStruct_type(CStruct *str);
 char* CStruct_name(CStruct *str);
+int CStruct_parse(CScope *scope, CStruct **pres);
 void CStruct_destroy(CStruct *s);
 
 int CStream_macro_init(void);
