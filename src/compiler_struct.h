@@ -224,11 +224,17 @@ typedef struct {
 
 typedef struct {
 	char *name;
+	size_t offset;
+	CType type;
+} CStructMember;
+
+typedef struct {
+	char *name;
 	char isDefined;
 	char isUnion;
 	size_t size;	// Bytes
-	size_t variableCount;
-	CVariable *variable;
+	size_t memberCount;
+	CStructMember *member;
 } CStruct;	// I think this could be used for unions as well
 
 typedef struct {

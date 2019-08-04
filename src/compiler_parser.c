@@ -225,7 +225,11 @@ void CSymbol_destroy(CSymbol symbol)
 	switch (symbol.type) {
 	case CSYMBOL_KEYWORD:
 		CKeyword_destroy(symbol.data);
-		break;
+		return;
+	case CSYMBOL_TYPE:
+		CType_destroy(*(CType*)symbol.data);
+		free(symbol.data);
+		return;
 	}
 }
 
@@ -274,50 +278,181 @@ static void print_error_unexp_token_at(CScope *scope)
 		printf_error(CStream_atCtx(scope->stream), "unexpected token: %s", str);
 }
 
+int add_type(CScope *scope, const char *name, CType to_add, CContext ctx)
+{
+	CType *entry = CType_alloc(to_add);
+
+	if (name == NULL) {
+		printf_error(ctx, "no name for type declaration");
+		free(entry);
+		return 0;
+	}
+	if (!CScope_addSymbol(scope, name, CSymbol_init(CSYMBOL_TYPE, entry), ctx)) {
+		free(entry);
+		return 0;
+	}
+	return 1;
+}
+
+static int skip_block(CScope *scope)
+{
+	CToken cur;
+	size_t level = 0;
+
+	while (CStream_poll(scope->stream, &cur)) {
+		if (CToken_streq(cur, "{"))
+			level++;
+		if (CToken_streq(cur, "}")) {
+			level--;
+			if (level == 0)
+				break;
+		}
+		if (CToken_streq(cur, ";"))
+			if (!CStream_nextBatch(scope->stream))
+				return 0;
+	}
+	return 1;
+}
+
+static int parse_variable(CScope *scope)
+{
+	char *name;
+	CType type;
+	CStorageType storage;
+	VecStr args;
+	CToken cur;
+
+	if (!CType_parseFull(scope, &name, &type, &storage, &args))
+		return 0;
+	if (!CStream_at(scope->stream, &cur)) {
+		printf_error(CStream_lastCtx(scope->stream), "expected ; = { after variable declaration");
+		free(name);
+		CType_destroy(type);
+		VecStr_destroy(args);
+		return 0;
+	}
+	if (CToken_streq(cur, ";")) {
+		if (CType_primitiveType(type) == CPRIMITIVE_FUNCTION) {
+			printf("prototype %s: ", name);
+			CType_print(type);
+			printf("\n");
+
+			free(name);
+			CType_destroy(type);
+			VecStr_destroy(args);
+			// functions are skipped and no prototype checking is done for now
+			if (!CStream_nextBatch(scope->stream))
+				return 0;
+		} else {
+			printf_error(cur.ctx, "unsupported type for now");
+			free(name);
+			CType_destroy(type);
+			VecStr_destroy(args);
+			return 0;
+		}
+	} else if (CToken_streq(cur, "=")) {
+		printf_error(cur.ctx, "unsupported assignment for now");
+		free(name);
+		CType_destroy(type);
+		VecStr_destroy(args);
+		return 0;
+	} else if (CToken_streq(cur, "{")) {
+		printf("fun %s: ", name);
+		CType_print(type);
+		printf("\n");
+
+		free(name);
+		CType_destroy(type);
+		VecStr_destroy(args);
+
+		skip_block(scope);
+	} else {
+		printf_error(cur.ctx, "expected ; = { after variable declaration");
+		free(name);
+		CType_destroy(type);
+		VecStr_destroy(args);
+		return 0;
+	}
+	return 1;
+}
+
+static int expect_semicolon(CScope *scope)
+{
+	CToken cur;
+
+	if (!CStream_poll(scope->stream, &cur)) {
+		printf_error(CStream_lastCtx(scope->stream), "expected ;");
+		return 0;
+	}
+	if (!CStream_nextBatch(scope->stream))
+		return 0;
+	return 1;
+}
+
 int CParser_exec(const char *path)
 {
 	CScope *scope;
-	int res = 1;
 	CKeyword keyword;
 	char *name;
 	CType type;
+	CContext ctx;
 
-	if (!CScope_create(path, &scope)) {
-		CScope_destroy(scope);
+	if (!CScope_create(path, &scope))
 		return 0;
-	}
 	if (!CStream_nextBatch(scope->stream)) {
 		CScope_destroy(scope);
 		return 0;
 	}
 	VecCToken_print(scope->stream->tokens.vec);
 	while (!CStream_isEof(scope->stream)) {
-		if (CKeyword_poll(scope, &keyword, NULL)) {
+		if (CKeyword_at(scope, &keyword, &ctx)) {
+			ctx = CContext_dup(ctx);
 			switch (keyword) {
 			case CKEYWORD_TYPEDEF:
+				CStream_forward(scope->stream);
 				if (!CType_parseFull(scope, &name, &type, NULL, NULL)) {
+					CContext_destroy(ctx);
 					CScope_destroy(scope);
 					return 0;
 				}
+				if (!expect_semicolon(scope)) {
+					free(name);
+					CContext_destroy(ctx);
+					CType_destroy(type);
+					CScope_destroy(scope);
+					return 0;
+				}
+				if (!add_type(scope, name, type, ctx)) {
+					free(name);
+					CContext_destroy(ctx);
+					CType_destroy(type);
+					CScope_destroy(scope);
+					return 0;
+				}
+				printf("type %s: ", name);
+				free(name);
 				CType_print(type);
 				printf("\n");
-				free(name);
-				CType_destroy(type);
 				break;
 			default:
-				print_error_unexp_token_at(scope);
-				CScope_destroy(scope);
-				return 0;
+				if (!parse_variable(scope)) {
+					CContext_destroy(ctx);
+					CScope_destroy(scope);
+					return 0;
+				}
+				break;
 			}
+			CContext_destroy(ctx);
+		} else if (!parse_variable(scope)) {
+			CScope_destroy(scope);
+			return 0;
 		} else {
 			print_error_unexp_token_at(scope);
 			CScope_destroy(scope);
 			return 0;
 		}
-		if (!CStream_nextBatch(scope->stream)) {
-			CScope_destroy(scope);
-			return 0;
-		}
+		if (CStream_isEof(scope->stream))
+			break;
 	}
 	if (!CStream_ensureMacroStackEmpty(scope->stream)) {
 		CScope_destroy(scope);
@@ -333,7 +468,7 @@ void CParser_destroy(CParser parser)
 	return;
 }
 
-int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx)
+int CKeyword_at(CScope *scope, CKeyword *pres, CContext *ctx)
 {
 	CToken cur;
 	CSymbol sym;
@@ -349,6 +484,14 @@ int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx)
 	*pres = (CKeyword)sym.data;
 	if (ctx != NULL)
 		*ctx = cur.ctx;
-	CStream_forward(scope->stream);
 	return 1;
+}
+
+int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx)
+{
+	int res = CKeyword_at(scope, pres, ctx);
+
+	if (res)
+		CStream_forward(scope->stream);
+	return res;
 }

@@ -48,6 +48,14 @@ static CType CType_default(void)
 	return res;
 }
 
+CType* CType_alloc(CType base)
+{
+	CType *res = (CType*)malloc(sizeof(base));
+
+	*res = base;
+	return res;
+}
+
 CType CType_fromFull(CTypeFull *full)
 {
 	CType res = CType_default();
@@ -422,7 +430,7 @@ static int poll_primitive(CScope *scope, CPrimitive *pres)
 		pres->data = NULL;
 		return 1;
 	} else if ((flags & CPRIMITIVE_FLAG_SIGNED) || (flags & CPRIMITIVE_FLAG_UNSIGNED)) {
-		pres->type = get_int_primitive_type(flags);;
+		pres->type = get_int_primitive_type(flags);
 		pres->data = (void*)4;
 		return 1;
 	} else {
@@ -595,6 +603,8 @@ int CTypeFull_parse(CScope *scope, char **pname, CTypeFull **pres, CStorageType 
 	CContext ctx;
 
 	*pname = NULL;
+	if (pargsName != NULL)
+		*pargsName = VecStr_init();
 	if (!poll_attributes(scope, &res->flags, pstorage))
 		goto CTypeFull_parse_error;
 	if (!poll_primitive(scope, &res->primitive))
@@ -900,7 +910,44 @@ void CTypeFull_destroy(CTypeFull *type)
 	free(type);
 }
 
-char* CStruct_type(CStruct *str)
+static CStructMember CStructMember_init(const char *name, size_t offset, CType type)
+{
+	CStructMember res;
+
+	res.name = name;
+	res.offset = offset;
+	res.type = type;
+	return res;
+}
+
+static void CStructMember_destroy(CStructMember member)
+{
+	free(member.name);
+	CType_destroy(member.type);
+}
+
+static CStruct CStruct_default(void)
+{
+	CStruct res;
+
+	res.name = NULL;
+	res.isDefined = 0;
+	res.isUnion = 0;
+	res.size = 0;
+	res.memberCount = 0;
+	res.member = NULL;
+	return res;
+}
+
+static CStruct* CStruct_alloc(CStruct base)
+{
+	CStruct *res = (CStruct*)malloc(sizeof(CStruct));
+
+	*res = base;
+	return res;
+}
+
+const char* CStruct_type(CStruct *str)
 {
 	if (str->isUnion)
 		return "union";
@@ -914,4 +961,72 @@ char* CStruct_name(CStruct *str)
 		return str->name;
 	else
 		return "{unnamed}";
+}
+
+static int CStruct_resolveMember(CStruct *s, const char *name, CStructMember *pres)
+{
+	size_t i;
+
+	for (i = 0; i < s->memberCount; i++)
+		if (streq(s->member[i].name, name)) {
+			if (pres != NULL)
+				*pres = s->member[i];
+			return 1;
+		}
+	return 0;
+}
+
+static int CStruct_addMember(CStruct *s, CStructMember to_add, CContext ctx)
+{
+	size_t cur;
+
+	if (CStruct_resolveMember(s, to_add.name, NULL)) {
+		printf_error(ctx, "redefinition of %s '%s' member '%s'", CStruct_type(s), CStruct_name(s), to_add.name);
+		return 0;
+	}
+	cur = s->memberCount++;
+	s->member = (CStructMember*)realloc(s->member, s->memberCount * sizeof(CStructMember));
+	s->member[cur] = to_add;
+	return 1;
+}
+
+int CStruct_parse(CScope *scope, int isUnion, CStruct **pres, CContext ctx)
+{
+	CStruct *res = CStruct_alloc(CStruct_default());
+	CToken cur;
+
+	res->isUnion = isUnion;
+	if (!CStream_poll(scope->stream, &cur)) {
+		printf_error(ctx, "expected %s name or {", CStruct_type(res));
+		CStruct_destroy(res);
+		return 0;
+	}
+	if (CToken_isIdentifier(cur)) {
+		res->name = strdup(cur.str);
+		if (!CStream_poll(scope->stream, &cur)) {
+			*pres = res;
+			return 1;
+		}
+	}
+	if (!CToken_streq(cur, "{")) {
+		*pres = res;
+		return 1;
+	}
+	if (!CStream_poll(scope->stream, &cur)) {
+		printf_error(cur.ctx, "expected %s members after {", CStruct_type(res));
+		CStruct_destroy(res);
+		return 0;
+	}
+	return 1;
+}
+
+void CStruct_destroy(CStruct *s)
+{
+	size_t i;
+
+	free(s->name);
+	for (i = 0; i < s->memberCount; i++)
+		CStructMember_destroy(s->member[i]);
+	free(s->member);
+	free(s);
 }

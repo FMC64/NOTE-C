@@ -117,6 +117,7 @@ CParser CParser_init(char *source_path);
 int CParser_exec(const char *path);
 void CParser_destroy(CParser parser);
 
+int CKeyword_at(CScope *scope, CKeyword *pres, CContext *ctx);
 int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx);
 
 
@@ -132,6 +133,7 @@ const char* CStorageType_str(CStorageType storage);
 
 void CPrimitive_destroy(CPrimitive primitive);
 
+CType* CType_alloc(CType base);
 CType CType_fromFull(CTypeFull *full);
 CPrimitiveType CType_primitiveType(CType type);
 void* CType_primitiveData(CType type);
@@ -155,8 +157,9 @@ void CType_print_tree(CType type);
 void CType_print(CType type);
 void CTypeFull_destroy(CTypeFull *type);
 
-char* CStruct_type(CStruct *str);
+const char* CStruct_type(CStruct *str);
 char* CStruct_name(CStruct *str);
+void CStruct_destroy(CStruct *s);
 
 int CStream_macro_init(void);
 void CStream_macro_quit(void);

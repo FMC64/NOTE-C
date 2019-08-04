@@ -345,7 +345,7 @@ int CStream_nextBatch(CStream *stream)
 
 int CStream_isEof(CStream *stream)
 {
-	return stream->tokens.vec.count == 0;
+	return (!StreamCToken_at(stream, NULL)) && (stream->buf.count == 0) && (stream->streams.size == 0);
 }
 
 StreamCToken StreamCToken_init(VecCToken vec)

@@ -26,22 +26,6 @@
 static status = 1;
 static jmp_buf main_end;
 
-static void strsonic_test(void)
-{
-	StrSonic sonic = StrSonic_init(NULL);
-
-	StrSonic_add(&sonic, "ab", 0, NULL);
-	StrSonic_add(&sonic, "cd", 0, NULL);
-	StrSonic_add(&sonic, "ae", 0, NULL);
-	StrSonic_add(&sonic, "str", 0, NULL);
-	StrSonic_add(&sonic, "string", 0, NULL);
-	StrSonic_add(&sonic, "string_test", 0, (void*)6);
-	StrSonic_add(&sonic, "string_lol", 0, NULL);
-	StrSonic_print(sonic);
-	memcheck_stats();
-	StrSonic_destroy(&sonic);
-}
-
 int AddIn_main(int isAppli, unsigned short OptionNum)
 {
 	if (setjmp(main_end) == 0) {
@@ -51,7 +35,6 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 		if (!CStream_macro_init())
 			return 0;
 
-		//memcheck_test_fragmenting();
 		CCompiler("\\\\crd0\\TEST.c");
 		//CCompiler("\\\\fls0\\TEST.c");
 
