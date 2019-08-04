@@ -407,7 +407,7 @@ static int are_flags_coherent(CPrimitiveFlag flags, size_t longCount, CContext c
 		if (!are_authorized_flags_only(flags, longCount, ctx, a_short, 0))
 			return 0;
 	if (flags & CPRIMITIVE_FLAG_INT)
-		if (!are_authorized_flags_only(flags, longCount, ctx, a_int, 0))
+		if (!are_authorized_flags_only(flags, longCount, ctx, a_int, 2))
 			return 0;
 	if (longCount > 0) {
 		if (flags & CPRIMITIVE_FLAG_DOUBLE) {

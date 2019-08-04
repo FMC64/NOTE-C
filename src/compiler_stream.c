@@ -32,25 +32,56 @@ int CFile_create(const char *filepath, CFile *pres)
 	return 1;
 }
 
+static int get_next(CFile *stream, size_t i, size_t *read, char *pres)
+{
+	char next;
+	size_t off = 0;
+
+	next = stream->buf[i + ++off];
+	if (next == 0) {
+		off--;
+		if (Bfile_ReadFile(stream->filehandle, &next, 1, -1) != 1) {
+			printf_error(CContext_init(stream->filepath, 0, 0), "last file character is a \\");
+			return 0;
+		}
+		if (next == '\r')
+			if (Bfile_ReadFile(stream->filehandle, &next, 1, -1) != 1) {
+				printf_error(CContext_init(stream->filepath, 0, 0), "last file character is a \\r");
+				return 0;
+			}
+	} else if (next == '\r') {
+		next = stream->buf[i + ++off];
+		if (next == 0) {
+			off--;
+			if (Bfile_ReadFile(stream->filehandle, &next, 1, -1) != 1) {
+				printf_error(CContext_init(stream->filepath, 0, 0), "last file character is a \\r");
+				return 0;
+			}
+			*read = off;
+			*pres = next;
+		}
+	}
+	*read = off;
+	*pres = next;
+	return 1;
+}
+
 static int escape_raw(CFile *stream, size_t start, size_t size)
 {
 	size_t i;
 	size_t j;
 	char next;
+	size_t read;
 
 	for (i = 0; i < size; i++)
 		if (stream->buf[start + i] == '\\') {
-			next = stream->buf[start + i + 1];
-			if (next == 0) {
-				if (Bfile_ReadFile(stream->filehandle, &next, 1, -1) != 1) {
-					printf_error(CContext_init(stream->filepath, 0, 0), "last file character is a \\");
-					return 0;
-				}
-			}
+			if (!get_next(stream, start + i, &read, &next))
+				return 0;
+			read++;
 			if (next == '\n') {
-				for (j = i; j + 2 < size; j++)	// delete both \ and linefeed
-					stream->buf[start + j] = stream->buf[start + j + 2];
-				if (!CFile_pollFileBytes(stream, start + size - 2, 2))	// feed 2 missing bytes at the end of the buffer
+				for (j = i; j + read < size; j++)	// delete both \ and linefeed
+					stream->buf[start + j] = stream->buf[start + j + read];
+				if (!CFile_pollFileBytes(stream, start + size - read, read))	// feed 2 missing bytes at the end of the buffer
 					return 0;
 			}
 		}

@@ -319,6 +319,15 @@ static int preproc_endif(CStream *stream, VecCToken tokens, CContext ctx)
 	return 1;
 }
 
+static void string_upper(char *str)
+{
+	size_t i;
+
+	for (i = 0; str[i] != 0 && str[i] != '.'; i++)
+		if (str[i] >= 'a' && str[i] <= 'z')
+			str[i] -= 32;
+}
+
 static int preproc_include(CStream *stream, VecCToken tokens, CContext ctx)
 {
 	CToken cur;
@@ -333,6 +342,7 @@ static int preproc_include(CStream *stream, VecCToken tokens, CContext ctx)
 	cur = tokens.token[0];
 	if (cur.type == CTOKEN_STRING_CHEVRON) {
 		name = string_create_from_Str(Str_init_from_CToken(cur));
+		string_upper(name);
 		path = strcat_dup("\\\\crd0\\", name);
 		free(name);
 		if (!CFile_create(path, &file)) {
