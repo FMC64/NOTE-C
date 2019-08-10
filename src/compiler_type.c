@@ -1,6 +1,15 @@
 
 #include "headers.h"
 
+static int CArray_eq(CArray a, CArray b)
+{
+	if (a.isUndef != b.isUndef)
+		return 0;
+	if (a.size != b.size)
+		return 0;
+	return 1;
+}
+
 static CReference CReference_init(size_t level)
 {
 	CReference res;
@@ -19,6 +28,38 @@ static CReference CReference_default(void)
 	res.arrayCount = 0;
 	res.array = NULL;
 	return res;
+}
+
+static void CReference_addArray(CReference *ref, CArray to_add)
+{
+	size_t cur = ref->arrayCount++;
+
+	ref->array = (CArray*)realloc(ref->array, ref->arrayCount * sizeof(CArray));
+	ref->array[cur] = to_add;
+}
+
+static CReference CReference_dup(CReference src)
+{
+	CReference res = CReference_init(src.level);
+	size_t i;
+
+	for (i = 0; i < src.arrayCount; i++)
+		CReference_addArray(&res, src.array[i]);
+	return res;
+}
+
+static int CReference_eq(CReference a, CReference b)
+{
+	size_t i;
+
+	if (a.level != b.level)
+		return 0;
+	if (a.arrayCount != b.arrayCount)
+		return 0;
+	for (i = 0; i < a.arrayCount; i++)
+		if (!CArray_eq(a.array[i], b.array[i]))
+			return 0;
+	return 1;
 }
 
 static void CReference_destroy(CReference reference)
@@ -41,6 +82,16 @@ static void VecCReference_add(VecCReference *vec, CReference to_add)
 
 	vec->ref = (CReference*)realloc(vec->ref, vec->count * sizeof(CReference));
 	vec->ref[cur] = to_add;
+}
+
+static VecCReference VecCReference_dup(VecCReference src)
+{
+	VecCReference res = VecCReference_init();
+	size_t i;
+
+	for (i = 0; i < src.count; i++)
+		VecCReference_add(&res, CReference_dup(src.ref[i]));
+	return res;
 }
 
 static void VecCReference_destroy(VecCReference vec)
@@ -79,7 +130,7 @@ void CPrimitive_destroy(CPrimitive primitive)
 	case CPRIMITIVE_FUNCTION:
 		CFunction_destroy(primitive.data);
 		return;
-	case CPRIMIVITE_STRUCT:
+	case CPRIMITIVE_STRUCT:
 		CStruct_destroy(primitive.data);
 		return;
 	}
@@ -443,9 +494,8 @@ static int poll_struct(CScope *scope, CPrimitive *pres)
 	if (!CStruct_parse(scope, &s))
 		return 0;
 	pres->data = s;
-	pres->type = CPRIMIVITE_STRUCT;
+	pres->type = CPRIMITIVE_STRUCT;
 	pres->isDataNamed = s->name != NULL;
-	if (!pres->isDataNamed)
 	return 1;
 }
 
@@ -605,6 +655,33 @@ static void CFunction_addArg(CFunction *func, CType to_add)
 
 	func->arg = (CType*)realloc(func->arg, func->argCount * sizeof(CType));
 	func->arg[cur] = to_add;
+}
+
+static CFunction* CFunction_dup(CFunction *src)
+{
+	CFunction *res = CFunction_alloc(*src);
+	size_t i;
+
+	res->returnType = CType_dup(res->returnType);
+	res->argCount = 0;
+	res->arg = NULL;
+	for (i = 0; i < src->argCount; i++)
+		CFunction_addArg(res, CType_dup(src->arg[i]));
+	return res;
+}
+
+int CFunction_eq(CFunction *a, CFunction *b)
+{
+	size_t i;
+
+	if (a->argCount != b->argCount)
+		return 0;
+	if (!CType_eq_strict(a->returnType, b->returnType))
+		return 0;
+	for (i = 0; i < a->argCount; i++)
+		if (!CType_eq_strict(a->arg[i], b->arg[i]))
+			return 0;
+	return 1;
 }
 
 void CFunction_destroy(CFunction *func)
@@ -980,7 +1057,7 @@ static void print_primitive_num(CPrimitiveType type, size_t bytes)
 		}
 }
 
-static void print_reference(CType type)
+static void print_reference(CType type, char *name)
 {
 	size_t refCount = CType_refCount(type);
 	size_t level;
@@ -988,10 +1065,16 @@ static void print_reference(CType type)
 	size_t j;
 	CReference ref;
 
+	if (refCount == 0)
+		if (name != NULL)
+			printf(name);
 	for (j = 0; j < refCount; j++) {
 		ref = CType_refAt(type, refCount - 1 - j);
 		for (i = 0; i < ref.level; i++)
 			printf("*");
+		if (j == 0)
+		if (name != NULL)
+			printf(name);
 		for (i = 0; i < ref.arrayCount; i++) {
 			printf("[");
 			if (!ref.array[i].isUndef)
@@ -1001,38 +1084,76 @@ static void print_reference(CType type)
 	}
 }
 
-static void print_function(CFunction *func, CType base)
+static void CFunction_print_args(CFunction *func)
 {
 	size_t i;
 
-	CType_print(func->returnType);
-	printf(" (");
-	print_reference(base);
-	printf(")(");
+	printf("(");
 	for (i = 0; i < func->argCount; i++) {
 		CType_print(func->arg[i]);
 		if (i < (func->argCount - 1))
 			printf(", ");
 	}
+	if (func->argCount == 0)
+		printf("void");
 	printf(")");
 }
 
-void CType_print(CType type)
+void CFunction_print_name(CFunction *func, CType base, const char *name)
+{
+	size_t refCount = CType_refCount(base);
+
+	CType_print(func->returnType);
+	printf(" ");
+	if (refCount > 0)
+		printf("(");
+	print_reference(base, name != NULL ? name : (refCount == 0 ? "-proc" : NULL));
+	if (refCount > 0)
+		printf(")");
+	CFunction_print_args(func);
+}
+
+void CFunction_print_name_noref(CFunction *func, const char *name)
+{
+	CType_print(func->returnType);
+	printf(" ");
+	if (name != NULL)
+		printf(name);
+	else
+		printf("-proc");
+	CFunction_print_args(func);
+}
+
+void CFunction_print(CFunction *func, CType base)
+{
+	CFunction_print_name(func, base, NULL);
+}
+
+void CType_print_name(CType type, const char *name)
 {
 	CTypeFlags_print(type.flags);
 	switch (CType_primitiveType(type)) {
 	case CPRIMITIVE_FUNCTION:
-		print_function(CType_primitiveData(type), type);
+		CFunction_print_name(CType_primitiveData(type), type, name);
 		break;
-	case CPRIMIVITE_STRUCT:
-		printf("%s %s", CStruct_type(CType_primitiveData(type)), CStruct_name(CType_primitiveData(type)));
-		print_reference(type);
+	case CPRIMITIVE_STRUCT:
+		CStruct_print(CType_primitiveData(type));
+		if (name != NULL)
+			printf(" ");
+		print_reference(type, name);
 		break;
 	default:
 		print_primitive_num(CType_primitiveType(type), (size_t)CType_primitiveData(type));
-		print_reference(type);
+		if (name != NULL)
+			printf(" ");
+		print_reference(type, name);
 		break;
 	}
+}
+
+void CType_print(CType type)
+{
+	CType_print_name(type, NULL);
 }
 
 void CTypeFull_destroy(CTypeFull *type)
@@ -1052,6 +1173,21 @@ static CStructMember CStructMember_init(const char *name, size_t offset, CType t
 	res.offset = offset;
 	res.type = type;
 	return res;
+}
+
+static CStructMember CStructMember_dup(CStructMember src)
+{
+	CStructMember res;
+
+	res.name = strdup(res.name);
+	res.offset = res.offset;
+	res.type = CType_dup(src.type);
+	return res;
+}
+
+static void CStructMember_print(CStructMember member)
+{
+	CType_print_name(member.type, member.name);
 }
 
 static void CStructMember_destroy(CStructMember member)
@@ -1115,7 +1251,7 @@ static int CStruct_addMember(CStruct *s, CStructMember to_add, CContext ctx)
 	size_t cur;
 
 	if (CStruct_resolveMember(s, to_add.name, NULL)) {
-		printf_error(ctx, "redefinition of %s '%s' member '%s'", CStruct_type(s), CStruct_name(s), to_add.name);
+		printf_error(ctx, "redefinition of %s %s member '%s'", CStruct_type(s), CStruct_name(s), to_add.name);
 		return 0;
 	}
 	cur = s->memberCount++;
@@ -1227,6 +1363,49 @@ int CStruct_parse(CScope *scope, CStruct **pres)
 	return 1;
 }
 
+CStruct* CStruct_dup(CStruct *src)
+{
+	CStruct *res = CStruct_alloc(*src);
+	size_t i;
+
+	res->name = strdup(src->name);
+	res->memberCount = 0;
+	res->member = NULL;
+	for (i = 0; i < src->memberCount; i++)
+		CStruct_addMember(res, CStructMember_dup(src->member[i]), CContext_null());
+	return res;
+}
+
+int CStruct_eq(CStruct *a, CStruct *b)
+{
+	size_t i;
+
+	if (a->isDefined != b->isDefined)
+		return 0;
+	if (a->memberCount != b->memberCount)
+		return 0;
+	for (i = 0; i < a->memberCount; i++)
+		if (!CType_eq_strict(a->member[i].type, b->member[i].type))
+			return 0;
+	return 1;
+}
+
+void CStruct_print(CStruct *s)
+{
+	size_t i;
+
+	printf("%s %s", CStruct_type(s), CStruct_name(s));
+	if (s->isDefined) {
+		printf(" {\n");
+		for (i = 0; i < s->memberCount; i++) {
+			printf("    ");
+			CStructMember_print(s->member[i]);
+			printf(";\n");
+		}
+		printf("}");
+	}
+}
+
 void CStruct_destroy(CStruct *s)
 {
 	size_t i;
@@ -1236,4 +1415,82 @@ void CStruct_destroy(CStruct *s)
 		CStructMember_destroy(s->member[i]);
 	free(s->member);
 	free(s);
+}
+
+static CPrimitive CPrimitive_dup(CPrimitive src)
+{
+	CPrimitive res = src;
+
+	if (!res.isDataNamed)
+		switch (src.type) {
+		case CPRIMITIVE_STRUCT:
+			res.data = CStruct_dup(src.data);
+			break;
+		case CPRIMITIVE_FUNCTION:
+			res.data = CFunction_dup(src.data);
+			break;
+		}
+	return res;
+}
+
+static int CPrimitive_eq(CPrimitive a, CPrimitive b)
+{
+	if (a.type != b.type)
+		return 0;
+	switch (a.type) {
+	case CPRIMITIVE_STRUCT:
+		return CStruct_eq(a.data, b.data);
+	case CPRIMITIVE_FUNCTION:
+		return CFunction_eq(a.data, b.data);
+	default:
+		return a.data == b.data;
+	}
+}
+
+static CTypeFull* CTypeFull_dup(CTypeFull *src)
+{
+	CTypeFull *res = CTypeFull_alloc(*src);
+
+	res->flags = src->flags;
+	res->refs = VecCReference_dup(src->refs);
+	res->primitive = CPrimitive_dup(src->primitive);
+	return res;
+}
+
+CType CType_dup(CType src)
+{
+	CType res = src;
+
+	if (!res.isTypeNamed)
+		res.full = CTypeFull_dup(src.full);
+	return res;
+}
+
+int CType_eq_adv(CType a, CType b, int do_strict)
+{
+	size_t refCount;
+	size_t i;
+
+	if (do_strict)
+		if (a.flags != b.flags)
+			return 0;
+	refCount = CType_refCount(a);
+	if (refCount != CType_refCount(b))
+		return 0;
+	for (i = 0; i < refCount; i++)
+		if (!CReference_eq(CType_refAt(a, i), CType_refAt(b, i)))
+			return 0;
+	if (!CPrimitive_eq(a.full->primitive, b.full->primitive))
+		return 0;
+	return 1;
+}
+
+int CType_eq(CType a, CType b)
+{
+	return CType_eq_adv(a, b, 0);
+}
+
+int CType_eq_strict(CType a, CType b)
+{
+	return CType_eq_adv(a, b, 1);
 }

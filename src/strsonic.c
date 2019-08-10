@@ -301,7 +301,8 @@ int StrSonic_resolveCSymbol(StrSonic *sonic, const char *key, CSymbol *pres)
 		return 0;
 	if (type == CSYMBOL_NONE)
 		return 0;
-	*pres = CSymbol_init(type, data);
+	if (pres != NULL)
+		*pres = CSymbol_init(type, data);
 	return 1;
 }
 

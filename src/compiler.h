@@ -107,6 +107,9 @@ CBlock CBlock_default(void);
 void CBlock_destroy(CBlock block);
 
 CSymbol CSymbol_init(CSymbolType type, void *data);
+int CSymbol_eq(CSymbol a, CSymbol b);
+int CSymbol_eq_strict(CSymbol a, CSymbol b);
+void CSymbol_print(CSymbol sym);
 void CSymbol_destroy(CSymbol symbol);
 void StrSonic_CSymbol_destroy(unsigned char type, void *data);
 
@@ -138,10 +141,18 @@ CType* CType_alloc(CType base);
 CType CType_fromFull(CTypeFull *full);
 CPrimitiveType CType_primitiveType(CType type);
 void* CType_primitiveData(CType type);
+CType CType_dup(CType src);
+int CType_eq_adv(CType a, CType b, int do_strict);
+int CType_eq(CType a, CType b);
+int CType_eq_strict(CType a, CType b);
 void CType_destroy(CType type);
 
 CTypeFull* CTypeFull_createPrimitive(CPrimitiveType type, size_t bits);
 
+int CFunction_eq(CFunction *a, CFunction *b);
+void CFunction_print(CFunction *func, CType base);
+void CFunction_print_name(CFunction *func, CType base, const char *name);
+void CFunction_print_name_noref(CFunction *func, const char *name);
 void CFunction_destroy(CFunction *func);
 
 int CVariable_parse(CScope *scope, CVariable **pres, VecStr *pargs);
@@ -156,11 +167,13 @@ void CType_shrink(CScope *scope, CType *to_shrink, CType *typeUsed);
 CTypeFull* CTypeFull_alloc(CTypeFull base);
 void CType_print_tree(CType type);
 void CType_print(CType type);
+void CType_print_name(CType type, const char *name);
 void CTypeFull_destroy(CTypeFull *type);
 
 const char* CStruct_type(CStruct *str);
 char* CStruct_name(CStruct *str);
 int CStruct_parse(CScope *scope, CStruct **pres);
+void CStruct_print(CStruct *s);
 void CStruct_destroy(CStruct *s);
 
 int CStream_macro_init(void);

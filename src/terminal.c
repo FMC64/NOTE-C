@@ -82,6 +82,16 @@ int printf_error(CContext ctx, const char *fmt, ...)
 	return res;
 }
 
+int printf_error_symbol_redef(const char *name, CSymbol had, CSymbol got, CContext ctx)
+{
+	printf_error_part(ctx, "redefinition of symbol %s differ:\n", name);
+	printf("had: ");
+	CSymbol_print(had);
+	printf("\ngot: \n");
+	CSymbol_print(got);
+	return printf("\n\n");
+}
+
 void terminal_show(void)
 {
 	ssize_t x = 0;

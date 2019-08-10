@@ -220,6 +220,52 @@ CSymbol CSymbol_init(CSymbolType type, void *data)
 	return res;
 }
 
+static int CSymbol_eq_adv(CSymbol a, CSymbol b, int do_strict)
+{
+	if (a.type != b.type)
+		return 0;
+	switch (a.type) {
+	case CSYMBOL_TYPE:
+		return CType_eq_adv(*(CType*)a.data, *(CType*)b.data, do_strict);
+	case CSYMBOL_STRUCT:
+		return CStruct_eq(a.data, b.data);
+	case CSYMBOL_FUNCTION:
+		return CFunction_eq(a.data, b.data);
+	default:
+		return a.data != b.data;
+	}
+}
+
+int CSymbol_eq(CSymbol a, CSymbol b)
+{
+	return CSymbol_eq_adv(a, b, 0);
+}
+
+int CSymbol_eq_strict(CSymbol a, CSymbol b)
+{
+	return CSymbol_eq_adv(a, b, 1);
+}
+
+void CSymbol_print(CSymbol sym)
+{
+	switch (sym.type) {
+	case CSYMBOL_TYPE:
+		printf("type: ");
+		CType_print(*(CType*)sym.data);
+		return;
+	case CSYMBOL_STRUCT:
+		CStruct_print(sym.data);
+		return;
+	case CSYMBOL_FUNCTION:
+		printf("function: ");
+		CFunction_print_name_noref(sym.data, NULL);
+		return;
+	default:
+		printf("symbol type %d, data %u", sym.type, sym.data);
+		return;
+	}
+}
+
 void CSymbol_destroy(CSymbol symbol)
 {
 	switch (symbol.type) {
@@ -232,6 +278,9 @@ void CSymbol_destroy(CSymbol symbol)
 		return;
 	case CSYMBOL_STRUCT:
 		CStruct_destroy(symbol.data);
+		return;
+	case CSYMBOL_FUNCTION:
+		CFunction_destroy(symbol.data);
 		return;
 	}
 }
@@ -283,15 +332,25 @@ static void print_error_unexp_token_at(CScope *scope)
 
 int add_type(CScope *scope, const char *name, CType to_add, CContext ctx)
 {
-	CType *entry = CType_alloc(to_add);
+	CSymbol entry = CSymbol_init(CSYMBOL_TYPE, CType_alloc(to_add));
+	CSymbol had;
 
 	if (name == NULL) {
 		printf_error(ctx, "no name for type declaration");
-		free(entry);
+		free(entry.data);
 		return 0;
 	}
-	if (!CScope_addSymbol(scope, name, CSymbol_init(CSYMBOL_TYPE, entry), ctx)) {
-		free(entry);
+	if (CScope_resolve(scope, name, &had)) {
+		if (!CSymbol_eq(entry, had)) {
+			printf_error_symbol_redef(name, had, entry, ctx);
+			free(entry.data);
+			return 0;
+		}
+		CSymbol_destroy(entry);
+		return 1;
+	}
+	if (!CScope_addSymbol(scope, name, entry, ctx)) {
+		free(entry.data);
 		return 0;
 	}
 	return 1;
@@ -313,6 +372,43 @@ static int skip_block(CScope *scope)
 		if (CToken_streq(cur, ";"))
 			if (!CStream_nextBatch(scope->stream))
 				return 0;
+	}
+	return 1;
+}
+
+static int add_function(CScope *scope, const char *name, CType to_add, CContext ctx)
+{
+	CType dup = CType_dup(to_add);
+	CSymbol entry = CSymbol_init(CSYMBOL_FUNCTION, CType_primitiveData(dup));
+	CSymbol had;
+
+	dup.full->primitive.type = CPRIMITIVE_VOID;
+	dup.full->primitive.data = NULL;
+	CType_destroy(dup);
+	if (name == NULL) {
+		printf_error(ctx, "no name for function declaration");
+		CSymbol_destroy(entry);
+		return 0;
+	}
+	if (CType_refCount(to_add) > 0) {
+		printf_error_part(ctx, "function declaration with reference: ");
+		CType_print(to_add);
+		printf("\n\n");
+		CSymbol_destroy(entry);
+		return 0;
+	}
+	if (CScope_resolve(scope, name, &had)) {
+		if (!CSymbol_eq(entry, had)) {
+			printf_error_symbol_redef(name, had, entry, ctx);
+			CSymbol_destroy(entry);
+			return 0;
+		}
+		CSymbol_destroy(entry);
+		return 1;
+	}
+	if (!CScope_addSymbol(scope, name, entry, ctx)) {
+		CSymbol_destroy(entry);
+		return 0;
 	}
 	return 1;
 }
@@ -340,9 +436,13 @@ static int parse_variable(CScope *scope)
 		CType_print(type);
 		printf("\n");
 
-		if (CType_primitiveType(type) == CPRIMITIVE_FUNCTION) {
-		// functions are skipped and no prototype checking is done for now
-		}
+		if (CType_primitiveType(type) == CPRIMITIVE_FUNCTION)
+			if (!add_function(scope, name, type, cur.ctx)) {
+				free(name);
+				CType_destroy(type);
+				VecStr_destroy(args);
+				return 0;
+			}
 		free(name);
 		CType_destroy(type);
 		VecStr_destroy(args);
@@ -441,6 +541,9 @@ int CParser_exec(const char *path)
 		CScope_destroy(scope);
 		return 0;
 	}
+	terminal_show();
+	//StrSonic_print(scope->block[0].symbols);
+	memcheck_stats();
 	CScope_destroy(scope);
 	return 1;
 }
