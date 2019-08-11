@@ -20,6 +20,7 @@ Str Str_dup(Str str);
 int Str_char_escape(Str str, size_t *i, char *pres, CContext ctx);
 int Str_escape(Str str, Str *pres, CContext ctx);
 void Str_print(Str str);
+int Str_eq(Str a, Str b);
 void Str_destroy(Str str);
 
 char* string_create_from_Str(Str str);
@@ -40,3 +41,7 @@ int StrSonic_resolve(StrSonic *sonic, const char *key, unsigned char *type, void
 int StrSonic_resolveCSymbol(StrSonic *sonic, const char *key, CSymbol *pres);
 void StrSonic_destroy_elem(StrSonic *sonic, const char *key);
 void StrSonic_destroy(StrSonic *sonic);
+
+VecStrSonicNode VecStrSonicNode_init(void);
+void VecStrSonicNode_add(VecStrSonicNode *vec, StrSonicNode to_add);
+void VecStrSonicNode_destroy(StrSonic *sonic, VecStrSonicNode vec);

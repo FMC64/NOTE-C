@@ -87,7 +87,7 @@ int printf_error_symbol_redef(const char *name, CSymbol had, CSymbol got, CConte
 	printf_error_part(ctx, "redefinition of symbol %s differ:\n", name);
 	printf("had: ");
 	CSymbol_print(had);
-	printf("\ngot: \n");
+	printf("\ngot: ");
 	CSymbol_print(got);
 	return printf("\n\n");
 }

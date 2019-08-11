@@ -10,6 +10,7 @@ int CToken_isIdentifier(CToken token);
 int CToken_isEndBatch(CToken token);
 void CToken_print(CToken token);
 int CToken_streq(CToken token, const char *str);
+int CToken_eq(CToken a, CToken b);
 void CToken_destroy(CToken token);
 
 VecCToken VecCToken_init(void);

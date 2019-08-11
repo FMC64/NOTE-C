@@ -241,6 +241,13 @@ void Str_print(Str str)
 	}
 }
 
+int Str_eq(Str a, Str b)
+{
+	if (a.size != b.size)
+		return 0;
+	return memcmp(a.data, b.data, a.size) == 0;
+}
+
 void Str_destroy(Str str)
 {
 	free(str.data);

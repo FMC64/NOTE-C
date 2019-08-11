@@ -41,7 +41,7 @@ typedef struct {
 	size_t line_start;
 } CTokenParserState;
 
-#define STREAMCTOKEN_BUFSIZE 256
+#define STREAMCTOKEN_BUFSIZE 32
 
 typedef struct {
 	const char *filepath;

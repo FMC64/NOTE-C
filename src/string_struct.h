@@ -12,10 +12,7 @@ typedef struct {
 	char **str;
 } VecStr;
 
-typedef struct {
-	void *root;
-	void (*elem_destroy_cb)(unsigned char, void*);
-} StrSonic;
+#define STRSONIC_SLOW
 
 /* STRSONIC TREE STRUCTURE
 
@@ -39,3 +36,18 @@ typedef struct {
 	void **sub;		// /!\ Danger /!\ - Do not read directly (unaligned pointer), use macro cpy() instead
 	void *data;		// Safe (copied on dump)
 } StrSonicNode;		// Uncompressed version of above data, use StrSonicNode_dump to get this
+
+typedef struct {
+	size_t count;
+	size_t allocated;
+	StrSonicNode *node;
+} VecStrSonicNode;
+
+typedef struct {
+	#ifndef STRSONIC_SLOW
+	void *root;
+	#else
+	VecStrSonicNode nodes;
+	#endif
+	void (*elem_destroy_cb)(unsigned char, void*);
+} StrSonic;

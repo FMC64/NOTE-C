@@ -173,6 +173,44 @@ CMacro CMacro_null(void)
 	return res;
 }
 
+static int CMacro_eq(void *data, VecStr args, VecCToken tokens, const char *name, CContext ctx)
+{
+	CMacro macro = CMacro_dump(data);
+	char *arg;
+	CToken token;
+	CToken token_got;
+	size_t i;
+
+	if (args.count != macro.argumentCount) {
+		printf_error(ctx, "incompatible redefinition of macro '%s':\nhad %u arguments, got %u", name, macro.argumentCount, args.count);
+		return 0;
+	}
+	for (i = 0; CMacro_nextArgument(&macro, &arg); i++)
+		if (!streq(arg, args.str[i])) {
+			printf_error(ctx, "incompatible redefinition of macro '%s' for argument #%u:\nhad %s, got %s", name, i + 1, arg, args.str[i]);
+			return 0;
+		}
+	for (i = 0; CMacro_nextToken(&macro, &token); i++) {
+		if (!VecCToken_at(tokens, i, &token_got)) {
+			printf_error(ctx, "incompatible redefinition of macro '%s':\nhad at least %u tokens, got %u", name, i + 1, i);
+			return 0;
+		}
+		if (!CToken_eq(token, token_got)) {
+			printf_error_part(ctx, "incompatible redefinition of macro '%s' for token #%u:\n", name, i + 1);
+			CToken_print(token);
+			printf(", got ");
+			CToken_print(token_got);
+			printf("\n\n");
+			return 0;
+		}
+	}
+	if (i != tokens.count) {
+		printf_error(ctx, "incompatible redefinition of macro '%s':\nhad %u tokens, got %u", name, i, tokens.count);
+		return 0;
+	}
+	return 1;
+}
+
 static int preproc_define(CStream *stream, VecCToken tokens, CContext ctx)
 {
 	CToken name;
@@ -180,6 +218,8 @@ static int preproc_define(CStream *stream, VecCToken tokens, CContext ctx)
 	VecStr args = VecStr_init();
 	VecCToken macro_tokens;
 	void *to_add;
+	void *had;
+	int res;
 
 	if (!StreamCToken_poll(&s, &name)) {
 		printf_error(ctx, "expected a name for macro definition");
@@ -197,12 +237,40 @@ static int preproc_define(CStream *stream, VecCToken tokens, CContext ctx)
 		s = save;
 		macro_tokens = StreamCToken_offset(&s).vec;
 	}
+	if (StrSonic_resolve(&stream->macros, name.str, NULL, &had)) {
+		res = CMacro_eq(had, args, macro_tokens, name.str, ctx);
+		VecStr_destroy(args);
+		return res;
+	}
 	to_add = CMacro_create(args, macro_tokens);
 	VecStr_destroy(args);
 	if (!StrSonic_add(&stream->macros, name.str, 0, to_add)) {
 		printf_error(ctx, "redefinition of macro '%s'", name.str);
+		free(to_add);
 		return 0;
 	}
+	return 1;
+}
+
+static int preproc_undef(CStream *stream, VecCToken tokens, CContext ctx)
+{
+	CToken name;
+	StreamCToken s = StreamCToken_init(tokens), save;
+	VecStr args = VecStr_init();
+	VecCToken macro_tokens;
+	void *to_add;
+
+	if (tokens.count != 1) {
+		printf_error(ctx, "this preprocessor directive takes one argument");
+		return 0;
+	}
+	if (tokens.token[0].type != CTOKEN_BASIC) {
+		printf_error_part(ctx, "invalid token for this preprocessor directive: ");
+		CToken_print(tokens.token[0]);
+		printf("\n\n");
+		return 0;
+	}
+	StrSonic_destroy_elem(&stream->macros, tokens.token[0].str);
 	return 1;
 }
 
@@ -363,6 +431,7 @@ static int preproc_include(CStream *stream, VecCToken tokens, CContext ctx)
 typedef int (*preproc_fun_t)(CStream*, VecCToken, CContext);
 static const struct {const char *key; preproc_fun_t fun; int is_flow;} str_preproc[] = {
 {"define", &preproc_define, 0},
+{"undef", &preproc_undef, 0},
 {"ifdef", &preproc_ifdef, 1},
 {"ifndef", &preproc_ifndef, 1},
 {"elifdef", &preproc_elifdef, 1},

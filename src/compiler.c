@@ -55,6 +55,15 @@ int CToken_streq(CToken token, const char *str)
 	return streq(token.str, str);
 }
 
+int CToken_eq(CToken a, CToken b)
+{
+	if (a.type != b.type)
+		return 0;
+	if (CToken_isString(a))
+		return Str_eq(Str_init_from_CToken(a), Str_init_from_CToken(b));
+	return streq(a.str, b.str);
+}
+
 int CToken_isEndBatch(CToken token)
 {
 	return CToken_streq(token, ";");

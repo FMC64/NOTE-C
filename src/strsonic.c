@@ -3,6 +3,7 @@
 
 #define NODE_TYPE_SUBCOUNTZERO 0x80
 #define NODE_TYPE_NODATA 0x40
+//#define NODE_ALIGN
 
 static StrSonicNode StrSonicNode_init(size_t type, char *key, size_t subCount, void **sub, void *data)
 {
@@ -16,6 +17,16 @@ static StrSonicNode StrSonicNode_init(size_t type, char *key, size_t subCount, v
 	return res;
 }
 
+static size_t memalign_up(size_t src, size_t align)
+{
+	size_t off = src % align;
+
+	if (off != 0)
+		return src - off + align;
+	else
+		return src;
+}
+
 static StrSonicNode StrSonicNode_dump(void **pdata)
 {
 	StrSonicNode res;
@@ -27,6 +38,9 @@ static StrSonicNode StrSonicNode_dump(void **pdata)
 	i += sizeof(unsigned char);
 	res.key = (char*)ptr_add(data, i);
 	i += strlen(res.key) + 1;
+	#ifdef NODE_ALIGN
+	i = memalign_up(i, sizeof(size_t));
+	#endif // NODE_ALIGN
 	if (res.type & NODE_TYPE_SUBCOUNTZERO) {
 		res.subCount = 0;
 		res.sub = NULL;
@@ -49,6 +63,9 @@ static size_t StrSonicNode_size(StrSonicNode *node)
 	size_t res = 1;
 
 	res += strlen(node->key) + 1;
+	#ifdef NODE_ALIGN
+	res = memalign_up(res, sizeof(size_t));
+	#endif // NODE_ALIGN
 	if (node->subCount > 0)
 		res += sizeof(size_t) + (node->subCount * sizeof(void*));
 	if (node->data != NULL)
@@ -66,6 +83,9 @@ static void* StrSonicNode_create_adv(StrSonicNode *node, size_t subToCopy)
 	i += sizeof(unsigned char);
 	strcpy((char*)ptr_add(res, i), node->key);
 	i += strlen(node->key) + 1;
+	#ifdef NODE_ALIGN
+	i = memalign_up(i, sizeof(size_t));
+	#endif // NODE_ALIGN
 	if (node->subCount > 0) {
 		cpy(*(size_t*)ptr_add(res, i), node->subCount);
 		i += sizeof(size_t);
@@ -100,7 +120,11 @@ StrSonic StrSonic_init(void (*elem_destroy_cb)(unsigned char, void*))
 {
 	StrSonic res;
 
+	#ifndef STRSONIC_SLOW
 	res.root = StrSonicNode_null();
+	#else
+	res.nodes = VecStrSonicNode_init();
+	#endif // STRSONIC_SLOW
 	res.elem_destroy_cb = elem_destroy_cb;
 	return res;
 }
@@ -171,6 +195,27 @@ static void StrSonicNode_setData(void **pnode, unsigned char type, void *data)
 	cpy(*pnode, new_node);
 }
 
+int StrSonic_addCSymbol(StrSonic *sonic, const char *key, CSymbol to_add)
+{
+	return StrSonic_add(sonic, key, to_add.type, to_add.data);
+}
+
+int StrSonic_resolveCSymbol(StrSonic *sonic, const char *key, CSymbol *pres)
+{
+	unsigned char type;
+	void *data;
+
+	if (!StrSonic_resolve(sonic, key, &type, &data))
+		return 0;
+	if (type == CSYMBOL_NONE)
+		return 0;
+	if (pres != NULL)
+		*pres = CSymbol_init(type, data);
+	return 1;
+}
+
+#ifndef STRSONIC_SLOW
+
 int StrSonic_add(StrSonic *sonic, const char *key, unsigned char type, void *data)
 {
 	void **pnode = &sonic->root;
@@ -217,11 +262,6 @@ int StrSonic_add(StrSonic *sonic, const char *key, unsigned char type, void *dat
 			return 1;
 		}
 	}
-}
-
-int StrSonic_addCSymbol(StrSonic *sonic, const char *key, CSymbol to_add)
-{
-	return StrSonic_add(sonic, key, to_add.type, to_add.data);
 }
 
 static void StrSonicNode_print_iter(void *node, size_t depth)
@@ -289,21 +329,7 @@ int StrSonic_resolve(StrSonic *sonic, const char *key, unsigned char *type, void
 		*type = snode.type;
 	if (data != NULL)
 		*data = snode.data;
-	return 1;
-}
-
-int StrSonic_resolveCSymbol(StrSonic *sonic, const char *key, CSymbol *pres)
-{
-	unsigned char type;
-	void *data;
-
-	if (!StrSonic_resolve(sonic, key, &type, &data))
-		return 0;
-	if (type == CSYMBOL_NONE)
-		return 0;
-	if (pres != NULL)
-		*pres = CSymbol_init(type, data);
-	return 1;
+	return snode.data != NULL;
 }
 
 static void destroy_node_elem(StrSonic *sonic, void **pnode)
@@ -355,3 +381,98 @@ void StrSonic_destroy(StrSonic *sonic)
 {
 	StrSonicNode_destroy_iter(sonic, &sonic->root);
 }
+
+#else
+
+void StrSonicNode_destroy(StrSonic *sonic, StrSonicNode node)
+{
+	sonic->elem_destroy_cb(node.type, node.data);
+	free(node.key);
+}
+
+VecStrSonicNode VecStrSonicNode_init(void)
+{
+	VecStrSonicNode res;
+
+	res.count = 0;
+	res.allocated = 0;
+	res.node = NULL;
+	return res;
+}
+
+void VecStrSonicNode_add(VecStrSonicNode *vec, StrSonicNode to_add)
+{
+	size_t cur = vec->count++;
+
+	if (vec->count > vec->allocated) {
+		vec->allocated += 8;
+		vec->node = (StrSonicNode*)realloc(vec->node, vec->allocated * sizeof(StrSonicNode));
+	}
+	vec->node[cur] = to_add;
+}
+
+static void VecStrSonicNode_destroy_elem(StrSonic *sonic, VecStrSonicNode *vec, size_t ndx)
+{
+	size_t i;
+
+	StrSonicNode_destroy(sonic, vec->node[ndx]);
+	vec->count--;
+	for (i = 0; i < vec->count; i++)
+		vec->node[i] = vec->node[i + 1];
+}
+
+void VecStrSonicNode_destroy(StrSonic *sonic, VecStrSonicNode vec)
+{
+	size_t i;
+
+	for (i = 0; i < vec.count; i++)
+		StrSonicNode_destroy(sonic, vec.node[i]);
+	free(vec.node);
+}
+
+int StrSonic_add(StrSonic *sonic, const char *key, unsigned char type, void *data)
+{
+	if (StrSonic_resolve(sonic, key, NULL, NULL))
+		return 0;
+	VecStrSonicNode_add(&sonic->nodes, StrSonicNode_init(type, strdup(key), 0, NULL, data));
+	return 1;
+}
+
+void StrSonic_print(StrSonic sonic)
+{
+
+}
+
+int StrSonic_resolve(StrSonic *sonic, const char *key, unsigned char *type, void **data)
+{
+	size_t i;
+
+	for (i = 0; i < sonic->nodes.count; i++)
+		if (streq(sonic->nodes.node[i].key, key)) {
+			if (type != NULL)
+				*type = sonic->nodes.node[i].type;
+			if (data != NULL)
+				*data = sonic->nodes.node[i].data;
+			return 1;
+		}
+	return 0;
+}
+
+void StrSonic_destroy_elem(StrSonic *sonic, const char *key)
+{
+	size_t i;
+
+	for (i = 0; i < sonic->nodes.count; i++)
+		if (streq(sonic->nodes.node[i].key, key)) {
+			VecStrSonicNode_destroy_elem(sonic, &sonic->nodes, i);
+			return;
+		}
+	return;
+}
+
+void StrSonic_destroy(StrSonic *sonic)
+{
+	VecStrSonicNode_destroy(sonic, sonic->nodes);
+}
+
+#endif

@@ -1073,8 +1073,8 @@ static void print_reference(CType type, char *name)
 		for (i = 0; i < ref.level; i++)
 			printf("*");
 		if (j == 0)
-		if (name != NULL)
-			printf(name);
+			if (name != NULL)
+				printf(name);
 		for (i = 0; i < ref.arrayCount; i++) {
 			printf("[");
 			if (!ref.array[i].isUndef)
