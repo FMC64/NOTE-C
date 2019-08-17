@@ -1,6 +1,6 @@
 
 #pragma once
 
-//#define MEMCHECK
+#define MEMCHECK
 
 #include "headers_ac.h"

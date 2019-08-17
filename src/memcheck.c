@@ -11,14 +11,30 @@ static MemcheckBlock MemcheckBlock_init(void *ptr, size_t size, Context ctx)
 	return res;
 }
 
+static MemcheckBlockLink MemcheckBlockLink_init(MemcheckBlock block, MemcheckBlockLink *next)
+{
+	MemcheckBlockLink res;
+
+	res.block = block;
+	res.next = next;
+	return res;
+}
+
+static MemcheckBlockLink* MemcheckBlockLink_alloc(MemcheckBlockLink base)
+{
+	MemcheckBlockLink *res = (MemcheckBlockLink*)malloc(sizeof(MemcheckBlockLink));
+
+	*res = base;
+	return res;
+}
+
 static VecMemcheckBlock VecMemcheckBlock_init(void)
 {
 	VecMemcheckBlock res;
 
 	#ifdef MEMCHECK_LIGHT
-	res.count = 0;
-	res.allocated = 0;
-	res.block = NULL;
+	res.last = NULL;
+	res.next = NULL;
 
 	#else
 	res.node = NULL;
@@ -69,16 +85,14 @@ static size_t MemcheckBlockNode_node_count(MemcheckBlockNode *node)
 static void VecMemcheckBlock_add(VecMemcheckBlock *vec, MemcheckBlock to_add)
 {
 	#ifdef MEMCHECK_LIGHT
-	size_t cur;
+
+	MemcheckBlockLink *to_add_ptr;
 
 	if (to_add.ptr == NULL)
 		return;
-	cur = vec->count++;
-	if (vec->count > vec->allocated) {
-		vec->allocated += 16;
-		vec->block = (MemcheckBlock*)realloc(vec->block, vec->allocated * sizeof(MemcheckBlock));
-	}
-	vec->block[cur] = to_add;
+	to_add_ptr = MemcheckBlockLink_alloc(MemcheckBlockLink_init(to_add, NULL));
+	*vec->last = to_add_ptr;
+	vec->last = &to_add_ptr->next;
 
 	#else
 	// Binary tree node insertion for radix (base 2) search
@@ -130,7 +144,12 @@ static void MemcheckBlockNode_count_iter(MemcheckBlockNode *node, size_t *pacc)
 static size_t VecMemcheckBlock_block_count(VecMemcheckBlock vec)
 {
 	#ifdef MEMCHECK_LIGHT
-	return vec.count;
+	size_t res = 0;
+	MemcheckBlockLink *cur;
+
+	for (cur = vec.next; cur != NULL; cur = cur->next)
+		res++;
+	return res;
 
 	#else
 	size_t res = 0;
@@ -157,10 +176,11 @@ static size_t VecMemcheckBlock_blocks_size(VecMemcheckBlock vec)
 {
 	#ifdef MEMCHECK_LIGHT
 	size_t res = 0;
-	size_t i;
 
-	for (i = 0; i < vec.count; i++)
-		res += vec.block[i].size;
+	MemcheckBlockLink *cur;
+
+	for (cur = vec.next; cur != NULL; cur = cur->next)
+		res += cur->block.size;
 	return res;
 
 	#else
@@ -171,15 +191,6 @@ static size_t VecMemcheckBlock_blocks_size(VecMemcheckBlock vec)
 
 	#endif
 }
-
-#ifdef MEMCHECK_LIGHT
-static void VecMemcheckBlock_remove(VecMemcheckBlock *vec, size_t ndx)
-{
-	vec->count--;
-	if (vec->count > 0)
-		vec->block[ndx] = vec->block[vec->count];
-}
-#endif
 
 static void MemcheckBlockNode_free_retro(MemcheckBlockNode *to_free)
 {
@@ -205,19 +216,31 @@ static void MemcheckBlockNode_free_retro(MemcheckBlockNode *to_free)
 	MemcheckBlockNode_free_retro(root);
 }
 
+static void flush_last(VecMemcheckBlock *vec)
+{
+	MemcheckBlockLink **cur;
+
+	for (cur = &vec->next; (*cur) != NULL; cur = &(*cur)->next);
+	vec->last = cur;
+}
+
 static int VecMemcheckBlock_search_delete(VecMemcheckBlock *vec, void *ptr)
 {
 	#ifdef MEMCHECK_LIGHT
 	size_t i;
+	MemcheckBlockLink **cur;
+	MemcheckBlockLink *cur_save;
 
 	if (ptr == NULL)
 		return 1;
-	for (i = 0; i < vec->count; i++) {
-		if (vec->block[i].ptr == ptr) {
-			VecMemcheckBlock_remove(vec, i);
+	for (cur = &vec->next; (*cur) != NULL; cur = &(*cur)->next)
+		if ((*cur)->block.ptr == ptr) {
+			cur_save = *cur;
+			*cur = (*cur)->next;
+			free(cur_save);
+			flush_last(vec);
 			return 1;
 		}
-	}
 	return 0;
 
 	#else
@@ -258,10 +281,19 @@ static void VecMemcheckBlock_free(VecMemcheckBlock *vec, void *ptr, Context ctx)
 	exit(0);
 }
 
-static void VecMemcheckBlock_destroy(VecMemcheckBlock blocks)
+static void VecMemcheckBlock_destroy(VecMemcheckBlock *blocks)
 {
 	#ifdef MEMCHECK_LIGHT
-	free(blocks.block);
+
+	MemcheckBlockLink *cur;
+	MemcheckBlockLink *next;
+
+	for (cur = blocks->next; cur != NULL; cur = next) {
+		next = cur->next;
+		free(cur);
+	}
+	blocks->last = &blocks->next;
+	blocks->next = NULL;
 
 	#else
 	// la flemme
@@ -270,7 +302,7 @@ static void VecMemcheckBlock_destroy(VecMemcheckBlock blocks)
 	return;
 }
 
-static VecMemcheckBlock blocks = VECMEMCHECKBLOCK_INIT;
+static VecMemcheckBlock blocks = {&blocks.next, NULL};
 static is_disabled = 0;
 
 static void alloc_check(size_t size, void *ptr, Context ctx)
@@ -354,13 +386,11 @@ static void MemcheckBlock_print_iter(MemcheckBlockNode *node)
 static void VecMemcheckBlock_print(VecMemcheckBlock vec)
 {
 	#ifdef MEMCHECK_LIGHT
+	MemcheckBlockLink *cur;
 	size_t i;
 
-	for (i = 0; i < vec.count; i++) {
-		MemcheckBlock_print(vec.block[i]);
-		printf("\n");
-	}
-
+	for (cur = vec.next, i = 0; cur != NULL && i < 128; cur = cur->next, i++)
+		MemcheckBlock_print(cur->block);
 	#else
 	MemcheckBlock_print_iter(vec.node);
 
@@ -385,7 +415,7 @@ void memcheck_recap(void)
 	}
 	printf("Press EXIT to continue");
 	terminal_show();
-	VecMemcheckBlock_destroy(blocks);
+	VecMemcheckBlock_destroy(&blocks);
 	return;
 }
 
