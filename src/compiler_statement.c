@@ -265,9 +265,6 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 						printf_error(CStream_lastCtx(scope->stream), "expected ) to end type cast");
 						goto CNode_poll_ac_err;
 					}
-					is_last_identifier = 0;
-					is_last_op = 1;
-					continue;
 				} else {
 					if (is_last_identifier) {
 						sub_proc_name = strdup(((CNodeValue*)res.node[res.nodeCount - 1].data)->token.str);
