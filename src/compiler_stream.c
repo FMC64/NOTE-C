@@ -544,6 +544,15 @@ int CStream_at(CStream *stream, CToken *pres)
 	return StreamCToken_at(&stream->tokens, pres);
 }
 
+int CStream_atIsType(CScope *scope)
+{
+	CToken cur;
+
+	if (!CStream_at(scope->stream, &cur))
+		return 0;
+	return CToken_isType(scope, cur);
+}
+
 int CStream_poll(CStream *stream, CToken *pres)
 {
 	return StreamCToken_poll(&stream->tokens, pres);

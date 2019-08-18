@@ -36,7 +36,7 @@ static void COperator_print(COperator op)
 		return;
 	case COPERATOR_CAST:
 		printf("cast ");
-		CType_primitiveData(*(CType*)op.data);
+		CType_print(*(CType*)op.data);
 		return;
 	case COPERATOR_STRUCT_MEMBER:
 		printf("struct.%s", op.data);
@@ -225,6 +225,7 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 	char *sub_proc_name;
 	const char *rpars[] = {")", "]", NULL};
 	COperatorType op_type;
+	CType type;
 
 	while (!(*is_done) && CStream_at(scope->stream, &cur)) {
 		if (CToken_streq(cur, sep)) {
@@ -250,17 +251,33 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 		if (!has_comma) {
 			if (CToken_streq(cur, "(")) {
 				CStream_forward(scope->stream);
-				if (is_last_identifier) {
-					sub_proc_name = strdup(((CNodeValue*)res.node[res.nodeCount - 1].data)->token.str);
-					CNodeOp_removeLast(&res);
-				} else
-					sub_proc_name = NULL;
-				if (!CNode_poll_ac(scope, sep, sub_proc_name, ")", is_done, depth + 1, &to_add)) {
+				if (CStream_atIsType(scope)) {
+					to_add = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(COPERATOR_CAST))));
+					if (!CType_parse(scope, &type))
+						goto CNode_poll_ac_err;
+					((CNodeOp*)to_add.data)->op.data = CType_alloc(type);
+					CNodeOp_addNode(&res, to_add);
+					if (!CStream_poll(scope->stream, &cur)) {
+						printf_error(CStream_lastCtx(scope->stream), "expected ) to end type cast");
+						goto CNode_poll_ac_err;
+					}
+					if (!CToken_streq(cur, ")")) {
+						printf_error(CStream_lastCtx(scope->stream), "expected ) to end type cast");
+						goto CNode_poll_ac_err;
+					}
+				} else {
+					if (is_last_identifier) {
+						sub_proc_name = strdup(((CNodeValue*)res.node[res.nodeCount - 1].data)->token.str);
+						CNodeOp_removeLast(&res);
+					} else
+						sub_proc_name = NULL;
+					if (!CNode_poll_ac(scope, sep, sub_proc_name, ")", is_done, depth + 1, &to_add)) {
+						free(sub_proc_name);
+						goto CNode_poll_ac_err;
+					}
 					free(sub_proc_name);
-					goto CNode_poll_ac_err;
+					CNodeOp_addNode(&res, to_add);
 				}
-				free(sub_proc_name);
-				CNodeOp_addNode(&res, to_add);
 			} else if (CToken_streq(cur, "[")) {
 				CStream_forward(scope->stream);
 				if (res.nodeCount == 0) {

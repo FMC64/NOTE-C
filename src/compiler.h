@@ -81,6 +81,7 @@ void CStream_end(CStream *stream);
 int CStream_forward(CStream *stream);
 int CStream_back(CStream *stream);
 int CStream_at(CStream *stream, CToken *pres);
+int CStream_atIsType(CScope *scope);
 int CStream_poll(CStream *stream, CToken *pres);
 int CStream_pollRev(CStream *stream, CToken *pres);
 CContext CStream_lastCtx(CStream *stream);

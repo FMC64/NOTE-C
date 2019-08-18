@@ -523,13 +523,7 @@ int try_poll_variables(CScope *scope, int *is_err)
 {
 	CToken cur;
 
-	*is_err = 0;
-	if (!CStream_at(scope->stream, &cur)) {
-		printf_error(CStream_lastCtx(scope->stream), "expected a keyword for statement or variable");
-		*is_err = 1;
-		return 0;
-	}
-	if (!CToken_isType(scope, cur))
+	if (!CStream_atIsType(scope))
 		return 0;
 	if (!parse_variable(scope)) {
 		*is_err = 1;
