@@ -289,7 +289,7 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 					goto CNode_poll_ac_err;
 				}
 				if (cur.type != CTOKEN_BASIC) {
-					printf_error_part(cur.ctx, "invalid token for member accessing:");
+					printf_error_part(cur.ctx, "invalid token for member accessing:\n");
 					CToken_print(cur);
 					printf("\n\n");
 					goto CNode_poll_ac_err;
