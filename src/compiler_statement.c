@@ -167,6 +167,24 @@ static int CNodeOp_stripToNode(CNodeOp op, CNode *pres)	// evaluate content of t
 	return 1;
 }
 
+static int CToken_to_unaryOp(CToken cur, COperatorType *pres)
+{
+	const struct {const char *str; COperatorType op_type;} unary_ops[] = {
+		{"++", COPERATOR_INC_POST},
+		{"--", COPERATOR_DEC_POST},
+		{NULL, COPERATOR_NONE}};
+	size_t i;
+
+	if (cur.type != CTOKEN_BASIC)
+		return 0;
+	for (i = 0; unary_ops[i].str != NULL; i++)
+		if (streq(cur.str, unary_ops[i].str)) {
+			*pres = unary_ops[i].op_type;
+			return 1;
+		}
+	return 0;
+}
+
 static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, const char *par, int *is_done, size_t depth, CNode *pres)
 {
 	CNodeOp res = CNodeOp_init(COperator_init(COPERATOR_NONE));	// just a buffer to put temporary tokens, at the end it should contain only one node (which is our response)
@@ -174,8 +192,11 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 	CToken cur;
 	CNode to_add;
 	int is_last_identifier = 0;
+	int is_last_op = 0;
 	int has_comma;
 	char *sub_proc_name;
+	const char *rpars[] = {")", "]", NULL};
+	COperatorType op_type;
 
 	while (!(*is_done) && CStream_at(scope->stream, &cur)) {
 		if (CToken_streq(cur, sep)) {
@@ -224,7 +245,12 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 				if (!CNode_poll_ac(scope, sep, NULL, "]", is_done, depth + 1, &to_add))
 					goto CNode_poll_ac_err;
 				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
- 			} else if (CToken_streq(cur, ")") || CToken_streq(cur, "]")) {
+			} else if (!is_last_op && res.nodeCount > 0 && CToken_to_unaryOp(cur, &op_type)) {
+				CStream_forward(scope->stream);
+				to_add = res.node[res.nodeCount - 1];
+				res.node[res.nodeCount - 1] = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(op_type))));
+				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
+			} else if (CToken_streq_in(cur, rpars)) {
 				CStream_forward(scope->stream);
 				if (!CToken_streq(cur, par)) {
 					printf_error(cur.ctx, "illegal parenthesis closure in this context\nexpected %s, got %s", par, cur.str);
@@ -237,10 +263,13 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 				CNodeOp_addNode(&res, to_add);
 			}
 		}
-		if (cur.type == CTOKEN_BASIC)
+		if (cur.type == CTOKEN_BASIC) {
 			is_last_identifier = str_is_identifier(cur.str);
-		else
+			is_last_op = CToken_streq_in(cur, c_op);
+		} else {
 			is_last_identifier = 0;
+			is_last_op = 0;
+		}
 	}
 	if (proc_name != NULL) {
 		if (!CNodeOp_stripToNode(res, &to_add))

@@ -63,6 +63,18 @@ int CToken_streq(CToken token, const char *str)
 	return streq(token.str, str);
 }
 
+int CToken_streq_in(CToken token, const char **strs)
+{
+	size_t i;
+
+	if (CToken_isString(token))
+		return 0;
+	for (i = 0; strs[i] != NULL; i++)
+		if (streq(token.str, strs[i]))
+			return 1;
+	return 0;
+}
+
 int CToken_eq(CToken a, CToken b)
 {
 	if (a.type != b.type)
@@ -389,11 +401,12 @@ static int CFile_pollFile(CFile *stream)
 }
 
 static char *sep[] = {" ", "\t", "\n", "\r", NULL};
-static char *op[] = {"->", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^|", "|=",
+char *c_op[] = {"->", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^|", "|=",
 "++", "--", "<<", ">>", "&&", "||", "==", "!=", "<=", ">=",
 "<", ">", "=", "!", "&", "^", "|", "~",
 "+", "-", "*", "/", "%" ,
 "(", ")", "[", "]", "{", "}", "?", ":", ";", ",", NULL};
+static char **op = c_op;
 static char *op_macro[] = {"##", NULL};
 
 static CTokenType get_string_type(char source)

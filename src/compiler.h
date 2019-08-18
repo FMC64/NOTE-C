@@ -1,6 +1,8 @@
 
 #pragma once
 
+extern char *c_op[];
+
 CToken CToken_init(CTokenType type, const char *str, CContext ctx);
 CToken CToken_dup(CToken src);
 CToken CToken_dupCtx(CToken src);
@@ -12,6 +14,7 @@ int CToken_isEndBatch(CToken token);
 int CToken_isType(CScope *scope, CToken token);
 void CToken_print(CToken token);
 int CToken_streq(CToken token, const char *str);
+int CToken_streq_in(CToken token, const char **strs);
 int CToken_eq(CToken a, CToken b);
 void CToken_destroy(CToken token);
 void CToken_destroyCtx(CToken token);
