@@ -167,7 +167,7 @@ static int CNodeOp_stripToNode(CNodeOp op, CNode *pres)	// evaluate content of t
 	return 1;
 }
 
-static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, int *is_done, size_t depth, CNode *pres)
+static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, const char *par, int *is_done, size_t depth, CNode *pres)
 {
 	CNodeOp res = CNodeOp_init(COperator_init(COPERATOR_NONE));	// just a buffer to put temporary tokens, at the end it should contain only one node (which is our response)
 	CNodeOp fun = CNodeOp_init(COperator_procCall_create(proc_name));  // used if is_proc
@@ -206,19 +206,36 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 					CNodeOp_removeLast(&res);
 				} else
 					sub_proc_name = NULL;
-				if (!CNode_poll_ac(scope, sep, sub_proc_name, is_done, depth + 1, &to_add)) {
+				if (!CNode_poll_ac(scope, sep, sub_proc_name, ")", is_done, depth + 1, &to_add)) {
 					free(sub_proc_name);
 					goto CNode_poll_ac_err;
 				}
 				free(sub_proc_name);
-			} else if (CToken_streq(cur, ")")) {
+				CNodeOp_addNode(&res, to_add);
+			} else if (CToken_streq(cur, "[")) {
 				CStream_forward(scope->stream);
+				if (res.nodeCount == 0) {
+					printf_error(cur.ctx, "expected a token before [ for array subscripting");
+					goto CNode_poll_ac_err;
+				}
+				to_add = res.node[res.nodeCount - 1];
+				res.node[res.nodeCount - 1] = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(COPERATOR_ARRAY))));
+				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
+				if (!CNode_poll_ac(scope, sep, NULL, "]", is_done, depth + 1, &to_add))
+					goto CNode_poll_ac_err;
+				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
+ 			} else if (CToken_streq(cur, ")") || CToken_streq(cur, "]")) {
+				CStream_forward(scope->stream);
+				if (!CToken_streq(cur, par)) {
+					printf_error(cur.ctx, "illegal parenthesis closure in this context\nexpected %s, got %s", par, cur.str);
+					goto CNode_poll_ac_err;
+				}
 				break;
 			} else {
 				to_add = CNode_init(CNODE_VALUE, CNodeValue_alloc(CNodeValue_create(cur)));
 				CStream_forward(scope->stream);
+				CNodeOp_addNode(&res, to_add);
 			}
-			CNodeOp_addNode(&res, to_add);
 		}
 		if (cur.type == CTOKEN_BASIC)
 			is_last_identifier = str_is_identifier(cur.str);
@@ -258,7 +275,7 @@ int CNode_poll(CScope *scope, const char *sep, CNode *pres)
 {
 	int is_done = 0;
 
-	if (!CNode_poll_ac(scope, sep, 0, &is_done, 0, pres))
+	if (!CNode_poll_ac(scope, sep, NULL, ")", &is_done, 0, pres))
 		return 0;
 	if (!is_done) {
 		printf_error(CStream_atCtx(scope->stream), "excess parenthesis");
