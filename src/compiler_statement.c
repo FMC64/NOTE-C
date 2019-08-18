@@ -19,12 +19,40 @@ static COperator COperator_cast_create(CType type)
 	return res;
 }
 
+static COperator COperator_procCall_create(const char *proc_name)
+{
+	COperator res;
+
+	res.type = COPERATOR_PROC_CALL;
+	res.data = strdup(proc_name);
+	return res;
+}
+
+static void COperator_print(COperator op)
+{
+	switch (op.type) {
+	case COPERATOR_PROC_CALL:
+		printf("call %s", op.data);
+		return;
+	case COPERATOR_CAST:
+		printf("cast ");
+		CType_primitiveData(*(CType*)op.data);
+		return;
+	default:
+		printf("op %u", op.type);
+	}
+}
 
 static void COperator_destroy(COperator op)
 {
-	if (op.type == COPERATOR_CAST) {
+	switch (op.type) {
+	case COPERATOR_CAST:
 		CType_destroy(*(CType*)op.data);
 		free(op.data);
+		return;
+	case COPERATOR_PROC_CALL:
+		free(op.data);
+		return;
 	}
 }
 
@@ -63,11 +91,18 @@ static void CNodeOp_addNode(CNodeOp *op, CNode to_add)
 	op->node[cur] = to_add;
 }
 
+static void CNodeOp_removeLast(CNodeOp *op)
+{
+	CNode_destroy(op->node[--op->nodeCount]);
+}
+
 static void CNodeOp_print(CNodeOp op)
 {
 	size_t i;
 
-	printf("(op %u: ", op.op.type);
+	printf("(");
+	COperator_print(op.op);
+	printf(": ");
 	for (i = 0; i < op.nodeCount; i++) {
 		CNode_print(op.node[i]);
 		if (i < op.nodeCount - 1)
@@ -126,43 +161,85 @@ void CNode_destroy(CNode node)
 	}
 }
 
-static int CNode_poll_ac(CScope *scope, const char *sep, int *is_done, size_t depth, CNode *pres)
+static int CNodeOp_stripToNode(CNodeOp op, CNode *pres)	// evaluate content of the node (merging tokens using operators)
+{
+	*pres = CNode_init(CNODE_OP, CNodeOp_alloc(op));
+	return 1;
+}
+
+static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, int *is_done, size_t depth, CNode *pres)
 {
 	CNodeOp res = CNodeOp_init(COperator_init(COPERATOR_NONE));	// just a buffer to put temporary tokens, at the end it should contain only one node (which is our response)
+	CNodeOp fun = CNodeOp_init(COperator_procCall_create(proc_name));  // used if is_proc
 	CToken cur;
 	CNode to_add;
+	int is_last_identifier = 0;
+	int has_comma;
+	char *sub_proc_name;
 
 	while (!(*is_done) && CStream_at(scope->stream, &cur)) {
 		if (CToken_streq(cur, sep)) {
 			if (depth != 0) {
 				printf_error(cur.ctx, "closing statement with token '%s' but %u %s still left to close", sep, depth, depth > 1 ? "parentheses are" : "parenthesis is");
-				CNodeOp_destroy(res);
-				return 0;
+				goto CNode_poll_ac_err;
 			}
-			if (!CStream_nextBatch(scope->stream)) {
-				CNodeOp_destroy(res);
-				return 0;
-			}
+			if (!CStream_nextBatch(scope->stream))
+				goto CNode_poll_ac_err;
 			*is_done = 1;
 			break;
 		}
-		if (CToken_streq(cur, "(")) {
-			CStream_forward(scope->stream);
-			if (!CNode_poll_ac(scope, sep, is_done, depth + 1, &to_add)) {
-				CNodeOp_destroy(res);
-				return 0;
+		has_comma = 0;
+		if (proc_name != NULL)
+			if (CToken_streq(cur, ",")) {
+				if (!CNodeOp_stripToNode(res, &to_add))
+					goto CNode_poll_ac_err;
+				res = CNodeOp_init(COperator_init(COPERATOR_NONE));
+				CNodeOp_addNode(&fun, to_add);
+				CStream_forward(scope->stream);
+				has_comma = 1;
 			}
-		} else if (CToken_streq(cur, ")")) {
-			CStream_forward(scope->stream);
-			break;
-		} else {
-			to_add = CNode_init(CNODE_VALUE, CNodeValue_alloc(CNodeValue_create(cur)));
-			CStream_forward(scope->stream);
+		if (!has_comma) {
+			if (CToken_streq(cur, "(")) {
+				CStream_forward(scope->stream);
+				if (is_last_identifier) {
+					sub_proc_name = strdup(((CNodeValue*)res.node[res.nodeCount - 1].data)->token.str);
+					CNodeOp_removeLast(&res);
+				} else
+					sub_proc_name = NULL;
+				if (!CNode_poll_ac(scope, sep, sub_proc_name, is_done, depth + 1, &to_add)) {
+					free(sub_proc_name);
+					goto CNode_poll_ac_err;
+				}
+				free(sub_proc_name);
+			} else if (CToken_streq(cur, ")")) {
+				CStream_forward(scope->stream);
+				break;
+			} else {
+				to_add = CNode_init(CNODE_VALUE, CNodeValue_alloc(CNodeValue_create(cur)));
+				CStream_forward(scope->stream);
+			}
+			CNodeOp_addNode(&res, to_add);
 		}
-		CNodeOp_addNode(&res, to_add);
+		if (cur.type == CTOKEN_BASIC)
+			is_last_identifier = str_is_identifier(cur.str);
+		else
+			is_last_identifier = 0;
 	}
-	*pres = CNode_init(CNODE_OP, CNodeOp_alloc(res));
+	if (proc_name != NULL) {
+		if (!CNodeOp_stripToNode(res, &to_add))
+			goto CNode_poll_ac_err;
+		res = CNodeOp_init(COperator_init(COPERATOR_NONE));
+		CNodeOp_addNode(&fun, to_add);
+		if (!CNodeOp_stripToNode(fun, pres))
+			goto CNode_poll_ac_err;
+	} else if (!CNodeOp_stripToNode(res, pres))
+		goto CNode_poll_ac_err;
 	return 1;
+
+CNode_poll_ac_err:
+	CNodeOp_destroy(res);
+	CNodeOp_destroy(fun);
+	return 0;
 }
 
 void CNode_print(CNode node)
@@ -181,7 +258,7 @@ int CNode_poll(CScope *scope, const char *sep, CNode *pres)
 {
 	int is_done = 0;
 
-	if (!CNode_poll_ac(scope, sep, &is_done, 0, pres))
+	if (!CNode_poll_ac(scope, sep, 0, &is_done, 0, pres))
 		return 0;
 	if (!is_done) {
 		printf_error(CStream_atCtx(scope->stream), "excess parenthesis");
