@@ -38,6 +38,12 @@ static void COperator_print(COperator op)
 		printf("cast ");
 		CType_primitiveData(*(CType*)op.data);
 		return;
+	case COPERATOR_STRUCT_MEMBER:
+		printf("struct.%s", op.data);
+		return;
+	case COPERATOR_STRUCT_PTR_MEMBER:
+		printf("struct_ptr->%s", op.data);
+		return;
 	default:
 		printf("op %u", op.type);
 	}
@@ -51,6 +57,10 @@ static void COperator_destroy(COperator op)
 		free(op.data);
 		return;
 	case COPERATOR_PROC_CALL:
+		free(op.data);
+		return;
+	case COPERATOR_STRUCT_MEMBER:
+	case COPERATOR_STRUCT_PTR_MEMBER:
 		free(op.data);
 		return;
 	}
@@ -185,6 +195,24 @@ static int CToken_to_unaryOp(CToken cur, COperatorType *pres)
 	return 0;
 }
 
+static int CToken_to_assoOp(CToken cur, COperatorType *pres)
+{
+	const struct {const char *str; COperatorType op_type;} asso_ops[] = {
+		{".", COPERATOR_STRUCT_MEMBER},
+		{"->", COPERATOR_STRUCT_PTR_MEMBER},
+		{NULL, COPERATOR_NONE}};
+	size_t i;
+
+	if (cur.type != CTOKEN_BASIC)
+		return 0;
+	for (i = 0; asso_ops[i].str != NULL; i++)
+		if (streq(cur.str, asso_ops[i].str)) {
+			*pres = asso_ops[i].op_type;
+			return 1;
+		}
+	return 0;
+}
+
 static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, const char *par, int *is_done, size_t depth, CNode *pres)
 {
 	CNodeOp res = CNodeOp_init(COperator_init(COPERATOR_NONE));	// just a buffer to put temporary tokens, at the end it should contain only one node (which is our response)
@@ -250,6 +278,26 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 				to_add = res.node[res.nodeCount - 1];
 				res.node[res.nodeCount - 1] = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(op_type))));
 				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
+			} else if (CToken_to_assoOp(cur, &op_type)) {
+				CStream_forward(scope->stream);
+				if (res.nodeCount == 0) {
+					printf_error(cur.ctx, "expected token before %s operator", cur.str);
+					goto CNode_poll_ac_err;
+				}
+				if (!CStream_poll(scope->stream, &cur)) {
+					printf_error(cur.ctx, "expected token after %s operator", cur.str);
+					goto CNode_poll_ac_err;
+				}
+				if (cur.type != CTOKEN_BASIC) {
+					printf_error_part(cur.ctx, "invalid token for member accessing:");
+					CToken_print(cur);
+					printf("\n\n");
+					goto CNode_poll_ac_err;
+				}
+				to_add = res.node[res.nodeCount - 1];
+				res.node[res.nodeCount - 1] = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(op_type))));
+				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
+				((CNodeOp*)res.node[res.nodeCount - 1].data)->op.data = strdup(cur.str);
 			} else if (CToken_streq_in(cur, rpars)) {
 				CStream_forward(scope->stream);
 				if (!CToken_streq(cur, par)) {
