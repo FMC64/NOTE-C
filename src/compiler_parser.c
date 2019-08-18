@@ -503,10 +503,58 @@ static int parse_typedef(CScope *scope)
 	return 1;
 }
 
+int try_poll_typedef(CScope *scope, int *is_err)
+{
+	CKeyword keyword;
+
+	*is_err = 0;
+	if (!CKeyword_at(scope, &keyword, NULL))
+		return 0;
+	if (keyword != CKEYWORD_TYPEDEF)
+		return 0;
+	if (!parse_typedef(scope)) {
+		*is_err = 1;
+		return 0;
+	}
+	return 1;
+}
+
+int try_poll_variables(CScope *scope, int *is_err)
+{
+	CToken cur;
+
+	*is_err = 0;
+	if (!CStream_at(scope->stream, &cur)) {
+		printf_error(CStream_lastCtx(scope->stream), "expected a keyword for statement or variable");
+		*is_err = 1;
+		return 0;
+	}
+	if (!CToken_isType(scope, cur))
+		return 0;
+	if (!parse_variable(scope)) {
+		*is_err = 1;
+		return 0;
+	}
+	return 1;
+}
+
+int poll_statement(CScope *scope)
+{
+	CNode node;
+
+	if (!CNode_poll(scope, ";", &node))
+		return 0;
+	terminal_flush();
+	CNode_print(node);
+	terminal_show();
+	CNode_destroy(node);
+	return 1;
+}
+
 int CParser_exec(const char *path)
 {
 	CScope *scope;
-	CKeyword keyword;
+	int is_err = 0;
 
 	if (!CScope_create(path, &scope))
 		return 0;
@@ -515,24 +563,21 @@ int CParser_exec(const char *path)
 		return 0;
 	}
 	while (!CStream_isEof(scope->stream)) {
-		if (CKeyword_at(scope, &keyword, NULL)) {
-			switch (keyword) {
-			case CKEYWORD_TYPEDEF:
-				if (!parse_typedef(scope)) {
-					CScope_destroy(scope);
-					return 0;
-				}
-				break;
-			default:
-				if (!parse_variable(scope)) {
-					CScope_destroy(scope);
-					return 0;
-				}
-				break;
+		if (!try_poll_typedef(scope, &is_err)) {
+			if (is_err) {
+				CScope_destroy(scope);
+				return 0;
 			}
-		} else if (!parse_variable(scope)) {
-			CScope_destroy(scope);
-			return 0;
+			if (!try_poll_variables(scope, &is_err)) {
+				if (is_err) {
+					CScope_destroy(scope);
+					return 0;
+				}
+				if (!poll_statement(scope)) {
+					CScope_destroy(scope);
+					return 0;
+				}
+			}
 		}
 		if (CStream_isEof(scope->stream))
 			break;
@@ -554,6 +599,20 @@ void CParser_destroy(CParser parser)
 	return;
 }
 
+int CKeyword_from_CToken(CToken src, CKeyword *pres)
+{
+	CSymbol sym;
+
+	if (src.type != CTOKEN_BASIC)
+		return 0;
+	if (!StrSonic_resolveCSymbol(&keywords, src.str, &sym))
+		return 0;
+	if (sym.type != CSYMBOL_KEYWORD)
+		return 0;
+	*pres = (CKeyword)sym.data;
+	return 1;
+}
+
 int CKeyword_at(CScope *scope, CKeyword *pres, CContext *ctx)
 {
 	CToken cur;
@@ -561,16 +620,9 @@ int CKeyword_at(CScope *scope, CKeyword *pres, CContext *ctx)
 
 	if (!CStream_at(scope->stream, &cur))
 		return 0;
-	if (cur.type != CTOKEN_BASIC)
-		return 0;
-	if (!CScope_resolve(scope, cur.str, &sym))
-		return 0;
-	if (sym.type != CSYMBOL_KEYWORD)
-		return 0;
-	*pres = (CKeyword)sym.data;
 	if (ctx != NULL)
 		*ctx = cur.ctx;
-	return 1;
+	return CKeyword_from_CToken(cur, pres);
 }
 
 int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx)
@@ -580,4 +632,9 @@ int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx)
 	if (res)
 		CStream_forward(scope->stream);
 	return res;
+}
+
+int CKeyword_isType(CKeyword k)
+{
+	return (k >= CKEYWORD_INLINE) && (k <= CKEYWORD_UNION);
 }

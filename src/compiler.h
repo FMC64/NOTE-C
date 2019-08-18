@@ -3,15 +3,18 @@
 
 CToken CToken_init(CTokenType type, const char *str, CContext ctx);
 CToken CToken_dup(CToken src);
+CToken CToken_dupCtx(CToken src);
 int CTokenType_isString(CTokenType type);
 int CToken_isString(CToken token);
 size_t CToken_stringSize(CToken token);
 int CToken_isIdentifier(CToken token);
 int CToken_isEndBatch(CToken token);
+int CToken_isType(CScope *scope, CToken token);
 void CToken_print(CToken token);
 int CToken_streq(CToken token, const char *str);
 int CToken_eq(CToken a, CToken b);
 void CToken_destroy(CToken token);
+void CToken_destroyCtx(CToken token);
 
 VecCToken VecCToken_init(void);
 void VecCToken_add(VecCToken *vec, CToken to_add);
@@ -122,8 +125,10 @@ CParser CParser_init(char *source_path);
 int CParser_exec(const char *path);
 void CParser_destroy(CParser parser);
 
+int CKeyword_from_CToken(CToken src, CKeyword *pres);
 int CKeyword_at(CScope *scope, CKeyword *pres, CContext *ctx);
 int CKeyword_poll(CScope *scope, CKeyword *pres, CContext *ctx);
+int CKeyword_isType(CKeyword k);
 
 
 void CCompiler(const char *path);
@@ -200,3 +205,7 @@ VecCMacroStackFrame VecCMacroStackFrame_init(void);
 void VecCMacroStackFrame_add(VecCMacroStackFrame *vec, CMacroStackFrame to_add);
 void VecCMacroStackFrame_deleteLast(VecCMacroStackFrame *vec);
 void VecCMacroStackFrame_destroy(VecCMacroStackFrame vec);
+
+int CNode_poll(CScope *scope, const char *sep, CNode *pres);
+void CNode_print(CNode node);
+void CNode_destroy(CNode node);

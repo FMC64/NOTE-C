@@ -30,3 +30,4 @@ SourceFile=:src\compiler_type.c
 SourceFile=:src\compiler_literal.c
 SourceFile=:src\compiler_stream.c
 SourceFile=:src\compiler_macro.c
+SourceFile=:src\compiler_statement.c

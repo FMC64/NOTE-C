@@ -26,6 +26,14 @@ CToken CToken_dup(CToken src)
 	return res;
 }
 
+CToken CToken_dupCtx(CToken src)
+{
+	CToken res = CToken_dup(src);
+
+	res.ctx = CContext_dup(src.ctx);
+	return res;
+}
+
 int CTokenType_isString(CTokenType type)
 {
 	return (type >= CTOKEN_STRING_SIMPLE) && (type <= CTOKEN_STRING_CHEVRON);
@@ -69,6 +77,22 @@ int CToken_isEndBatch(CToken token)
 	return CToken_streq(token, ";");
 }
 
+int CToken_isType(CScope *scope, CToken token)
+{
+	CKeyword keyword;
+	CSymbol sym;
+
+	if (token.type != CTOKEN_BASIC)
+		return 0;
+	if (CKeyword_from_CToken(token, &keyword))
+		return CKeyword_isType(keyword);
+	else {
+		if (!CScope_resolve(scope, token.str, &sym))
+			return 0;
+		return sym.type == CSYMBOL_TYPE;
+	}
+}
+
 static void get_quote_char(CTokenType type, char *start, char *end)
 {
 	switch (type) {
@@ -103,6 +127,12 @@ void CToken_print(CToken token)
 void CToken_destroy(CToken token)
 {
 	free(token.str);
+}
+
+void CToken_destroyCtx(CToken token)
+{
+	CContext_destroy(token.ctx);
+	CToken_destroy(token);
 }
 
 VecCToken VecCToken_init(void)

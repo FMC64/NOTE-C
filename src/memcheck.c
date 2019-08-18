@@ -426,7 +426,7 @@ static void memcheck_stats_actual(void)
 	size_t total = VecMemcheckBlock_blocks_size(blocks);
 	size_t overhead = block_count * 4;
 	#ifdef MEMCHECK_LIGHT
-	size_t memcheck_overhead = block_count * sizeof(MemcheckBlock);
+	size_t memcheck_overhead = block_count * (sizeof(MemcheckBlockLink) + 4);
 	#else
 	size_t memcheck_overhead = MemcheckBlockNode_node_count(blocks.node) * (sizeof(MemcheckBlockNode) + 4) + block_count * (sizeof(MemcheckBlock) + 4);
 	#endif // MEMCHECK_LIGHT
