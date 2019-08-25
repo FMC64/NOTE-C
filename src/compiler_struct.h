@@ -338,12 +338,13 @@ typedef enum {
 	COPERATOR_XOR_COPY,
 	COPERATOR_OR_COPY,
 
-	COPERATOR_OR_COMMA
+	COPERATOR_COMMA
 } COperatorType;
 
 typedef struct {
 	COperatorType type;
 	void *data;
+	CContext ctx;	// only for cast
 } COperator;
 
 typedef enum {

@@ -171,6 +171,19 @@ int CScope_addSymbol(CScope *scope, const char *key, CSymbol to_add, CContext ct
 	return 1;
 }
 
+int CKeyword_resolve(const char *key, CKeyword *pres)
+{
+	CSymbol sym;
+
+	if (!StrSonic_resolveCSymbol(&keywords, key, &sym))
+		return 0;
+	if (sym.type != CSYMBOL_KEYWORD)
+		return 0;
+	if (pres != NULL)
+		*pres = (CKeyword)sym.data;
+	return 1;
+}
+
 int CScope_resolve(CScope *scope, const char *key, CSymbol *pres)
 {
 	size_t i;

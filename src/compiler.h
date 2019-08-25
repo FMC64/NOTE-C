@@ -108,6 +108,7 @@ int CScope_create(const char *filepath, CScope **pres);
 void CScope_addBlock(CScope *scope, CBlock to_add);
 int CScope_removeBlock(CScope *scope, CContext ctx);
 int CScope_addSymbol(CScope *scope, const char *key, CSymbol to_add, CContext ctx);
+int CKeyword_resolve(const char *key, CKeyword *pres);
 int CScope_resolve(CScope *scope, const char *key, CSymbol *pres);
 void CScope_destroy(CScope *scope);
 

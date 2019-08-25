@@ -28,6 +28,11 @@ CContext CContext_null(void)
 	return CContext_init("{undefined file}", 0, 0);
 }
 
+CContext CContext_null_ptr(void)
+{
+	return CContext_init(NULL, 0, 0);
+}
+
 void CContext_print(CContext ctx)
 {
 	printf("%s line %d(%d)\n", ctx.file, ctx.line, ctx.colon);
