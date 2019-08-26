@@ -21,12 +21,12 @@ static COperator COperator_cast_create(CType type)
 	return res;
 }
 
-static COperator COperator_procCall_create(const char *proc_name)
+static COperator COperator_procCall_create(void)
 {
 	COperator res;
 
 	res.type = COPERATOR_PROC_CALL;
-	res.data = strdup(proc_name);
+	res.data = NULL;
 	res.ctx = CContext_null_ptr();
 	return res;
 }
@@ -35,7 +35,7 @@ static void COperator_print(COperator op)
 {
 	switch (op.type) {
 	case COPERATOR_PROC_CALL:
-		printf("call %s", op.data);
+		printf("call ");
 		return;
 	case COPERATOR_CAST:
 		printf("cast ");
@@ -59,9 +59,6 @@ static void COperator_destroy(COperator op)
 		CType_destroy(*(CType*)op.data);
 		free(op.data);
 		CContext_destroy(op.ctx);
-		return;
-	case COPERATOR_PROC_CALL:
-		free(op.data);
 		return;
 	case COPERATOR_STRUCT_MEMBER:
 	case COPERATOR_STRUCT_PTR_MEMBER:
@@ -110,19 +107,140 @@ static void CNodeOp_removeLast(CNodeOp *op)
 	CNode_destroy(op->node[--op->nodeCount]);
 }
 
+static int CNodeOp_tryPrintAsso(CNodeOp op)
+{
+	const struct {COperatorType type; const char *str; } table[] = {
+		{COPERATOR_MUL, "*"},
+		{COPERATOR_DIV, "/"},
+		{COPERATOR_MOD, "%"},
+		{COPERATOR_ADD, "+"},
+		{COPERATOR_ADD, "-"},
+		{COPERATOR_SHIFT_LEFT, "<<"},
+		{COPERATOR_SHIFT_RIGHT, ">>"},
+		{COPERATOR_LESS, "<"},
+		{COPERATOR_LESS_EQ, "<="},
+		{COPERATOR_GREATER, ">"},
+		{COPERATOR_GREATER_EQ, ">="},
+		{COPERATOR_EQ, "=="},
+		{COPERATOR_NOT_EQ, "!="},
+		{COPERATOR_BITWISE_AND, "&"},
+		{COPERATOR_BITWISE_XOR, "^"},
+		{COPERATOR_BITWISE_OR, "|"},
+		{COPERATOR_LOGICAL_AND, "&&"},
+		{COPERATOR_LOGICAL_OR, "||"},
+		{COPERATOR_COPY, "="},
+		{COPERATOR_ADD_COPY, "+="},
+		{COPERATOR_SUB_COPY, "-="},
+		{COPERATOR_MUL_COPY, "*="},
+		{COPERATOR_DIV_COPY, "/="},
+		{COPERATOR_MOD_COPY, "%="},
+		{COPERATOR_SHIFT_LEFT_COPY, "<<="},
+		{COPERATOR_SHIFT_RIGHT_COPY, ">>="},
+		{COPERATOR_AND_COPY, "&="},
+		{COPERATOR_XOR_COPY, "^="},
+		{COPERATOR_OR_COPY, "|="},
+		{COPERATOR_COMMA, ","},
+		{COPERATOR_NONE, NULL}};
+	size_t i;
+
+	if (op.op.type == COPERATOR_PROC_CALL) {
+		CNode_print(op.node[0]);
+		printf("(");
+		for (i = 1; i < op.nodeCount; i++) {
+			CNode_print(op.node[i]);
+			if (i < op.nodeCount - 1)
+				printf(", ");
+		}
+		printf(")");
+		return 1;
+	}
+	if (op.op.type == COPERATOR_ARRAY) {
+		CNode_print(op.node[0]);
+		printf("[");
+		CNode_print(op.node[1]);
+		printf("]");
+		return 1;
+	}
+	for (i = 0; table[i].type != COPERATOR_NONE; i++)
+		if (table[i].type == op.op.type) {
+			printf("(");
+			CNode_print(op.node[0]);
+			printf(" %s ", table[i].str);
+			CNode_print(op.node[1]);
+			printf(")");
+			return 1;
+		}
+	return 0;
+}
+
+static int CNodeOp_tryPrintUnary(CNodeOp op)
+{
+	const struct {COperatorType type; const char *str; } table[] = {
+		{COPERATOR_INC_PRE, "++"},
+		{COPERATOR_DEC_PRE, "--"},
+		{COPERATOR_UNARY_PLUS, "+"},
+		{COPERATOR_UNARY_MINUS, "-"},
+		{COPERATOR_LOGICAL_NOT, "!"},
+		{COPERATOR_BITWISE_NOT, "~"},
+		{COPERATOR_DEREF, "*"},
+		{COPERATOR_REF, "&"},
+		{COPERATOR_SIZEOF, "sizeof "},
+		{COPERATOR_NONE, NULL}};
+	const struct {COperatorType type; const char *str; } table_post[] = {
+		{COPERATOR_INC_POST, "++"},
+		{COPERATOR_DEC_POST, "--"},
+		{COPERATOR_NONE, NULL}};
+	const struct {COperatorType type; const char *str; } table_post_str[] = {
+		{COPERATOR_STRUCT_MEMBER, "."},
+		{COPERATOR_STRUCT_PTR_MEMBER, "->"},
+		{COPERATOR_NONE, NULL}};
+	size_t i;
+
+	if (op.op.type == COPERATOR_CAST) {
+		printf("(");
+		CType_print(*(CType*)op.op.data);
+		printf(")");
+		if (op.nodeCount > 0)
+			CNode_print(op.node[0]);
+		return 1;
+	}
+	for (i = 0; table[i].type != COPERATOR_NONE; i++)
+		if (table[i].type == op.op.type) {
+			printf(table[i].str);
+			CNode_print(op.node[0]);
+			return 1;
+		}
+	for (i = 0; table_post[i].type != COPERATOR_NONE; i++)
+		if (table_post[i].type == op.op.type) {
+			CNode_print(op.node[0]);
+			printf(table_post[i].str);
+			return 1;
+		}
+	for (i = 0; table_post_str[i].type != COPERATOR_NONE; i++)
+		if (table_post_str[i].type == op.op.type) {
+			CNode_print(op.node[0]);
+			printf(table_post_str[i].str);
+			printf(op.op.data);
+			return 1;
+		}
+	return 0;
+}
+
 static void CNodeOp_print(CNodeOp op)
 {
 	size_t i;
 
-	printf("(");
-	COperator_print(op.op);
-	printf(": ");
-	for (i = 0; i < op.nodeCount; i++) {
-		CNode_print(op.node[i]);
-		if (i < op.nodeCount - 1)
-			printf(", ");
+	if (!CNodeOp_tryPrintAsso(op)) {
+		if (!CNodeOp_tryPrintUnary(op)) {
+			COperator_print(op.op);
+			printf(": ");
+			for (i = 0; i < op.nodeCount; i++) {
+				CNode_print(op.node[i]);
+				if (i < op.nodeCount - 1)
+					printf(", ");
+			}
+		}
 	}
-	printf(")");
 }
 
 static int CNodeOp_at(CNodeOp *op, size_t ndx, CNode *pres)
@@ -214,7 +332,7 @@ static int CNode_isRawOperator(CNode node)
 			return 0;
 		if (CKeyword_resolve(value->token.str, NULL))
 			return 1;
-		return !str_is_identifier(value->token.str);
+		return !str_is_value(value->token.str);
 	default:
 		return 0;
 	}
@@ -234,11 +352,11 @@ static int CNodeOp_isUnaryValid(CNodeOp *op, size_t ndx)
 		ctx = ((CNodeValue*)op->node[ndx].data)->token.ctx;
 	}
 	if (!CNodeOp_at(op, ndx + 1, &node)) {
-		printf_error(ctx, "expected value on right of operator %s", str);
+		printf_error(ctx, "expected value on right of unary operator %s", str);
 		return 0;
 	}
 	if (CNode_isRawOperator(node)) {
-		printf_error_part(ctx, "expected valid value on right of operator %s\ngot: ", str);
+		printf_error_part(ctx, "expected valid value on right of unary operator %s\ngot: ", str);
 		CNode_print(node);
 		printf("\n\n");
 		return 0;
@@ -252,6 +370,20 @@ static int CNodeOp_isUnaryAdequate(CNodeOp *op, size_t ndx)
 
 	if (!CNodeOp_at(op, ndx - 1, &node))
 		return 1;
+	if (CNode_isRawOperator(node))
+		return 1;
+	return 0;
+}
+
+static int CNodeOp_isUnaryCastAdequate(CNodeOp *op, size_t ndx)
+{
+	CNode node;
+
+	if (!CNodeOp_at(op, ndx - 1, &node))
+		return 1;
+	if (node.type == CNODE_VALUE)
+		if (CToken_streq(((CNodeValue*)node.data)->token, "sizeof"))
+			return 0;
 	if (CNode_isRawOperator(node))
 		return 1;
 	return 0;
@@ -294,6 +426,35 @@ static int CNodeOp_stripUnaries(CNodeOp *node_op, const COperatorType_Binding *b
 	return 1;
 }
 
+static int CNodeOp_isUnarySizeofValid(CNodeOp *op, size_t ndx)
+{
+	CNode node;
+	CContext ctx;
+
+	if (op->node[ndx].type == CNODE_OP)
+		ctx = ((CNodeOp*)op->node[ndx].data)->op.ctx;
+	else
+		ctx = ((CNodeValue*)op->node[ndx].data)->token.ctx;
+	printf("\n");
+	CNodeOp_print(*op);
+	printf("\n");
+	if (!CNodeOp_at(op, ndx + 1, &node)) {
+		printf_error(ctx, "expected value on right of unary operator sizeof");
+		return 0;
+	}
+	if (node.type == CNODE_OP)
+		if (((CNodeOp*)node.data)->op.type == COPERATOR_CAST && ((CNodeOp*)node.data)->nodeCount == 0)
+			return 1;
+	if (CNode_isRawOperator(node)) {
+		printf_error_part(ctx, "expected valid value on right of unary operator sizeof\ngot: ");
+		CNode_print(node);
+		printf("\n\n");
+		return 0;
+	}
+	return 1;
+}
+
+
 static int CNodeOp_stripUnaries_lv2_custom(CNodeOp *node_op, const COperatorType_Binding *bindings)
 {
 	size_t i;
@@ -304,12 +465,10 @@ static int CNodeOp_stripUnaries_lv2_custom(CNodeOp *node_op, const COperatorType
 
 	for (i_norm = 0; i_norm < node_op->nodeCount; i_norm++) {
 		i = node_op->nodeCount - 1 - i_norm;
-		CNodeOp_print(*node_op);
-		printf("\n");
 		if (node_op->node[i].type == CNODE_OP) {
 			cast = node_op->node[i].data;
 			if (cast->op.type == COPERATOR_CAST && cast->nodeCount == 0) {
-				if (!CNodeOp_isUnaryAdequate(node_op, i))
+				if (!CNodeOp_isUnaryCastAdequate(node_op, i))
 					continue;
 				if (!CNodeOp_isUnaryValid(node_op, i))
 					return 0;
@@ -325,7 +484,7 @@ static int CNodeOp_stripUnaries_lv2_custom(CNodeOp *node_op, const COperatorType
 			if (CToken_streq(value->token, "sizeof")) {
 				if (!CNodeOp_isUnaryAdequate(node_op, i))
 					continue;
-				if (!CNodeOp_isUnaryValid(node_op, i))
+				if (!CNodeOp_isUnarySizeofValid(node_op, i))
 					return 0;
 				op = COperator_init(COPERATOR_SIZEOF);
 				CNodeOp_stripUnary(node_op, i, op);
@@ -482,6 +641,7 @@ static int CNodeOp_stripToNode(CScope *scope, CNodeOp *op, CNode *pres)	// evalu
 	const COperatorType_Binding lv15[] = {
 		{",", COPERATOR_COMMA},
 		{NULL, COPERATOR_NONE}};
+	size_t i;
 
 	if (!CNodeOp_stripUnaries_lv2_custom(op, lv2))
 		return 0;
@@ -515,7 +675,11 @@ static int CNodeOp_stripToNode(CScope *scope, CNodeOp *op, CNode *pres)	// evalu
 	}
 	if (op->nodeCount > 1) {
 		printf_error_part(CStream_atCtx(scope->stream), "invalid expression: operators probably missing:\n");	// TODO: print all excess nodes to help programmer figuring out what's wrong
-		CNodeOp_print(*op);
+		for (i = 0; i < op->nodeCount; i++) {
+			printf("{");
+			CNode_print(op->node[i]);
+			printf("}");
+		}
 		printf("\n\n");
 		return 0;
 	}
@@ -561,16 +725,14 @@ static int CToken_to_assoOp(CToken cur, COperatorType *pres)
 	return 0;
 }
 
-static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, const char *par, int *is_done, size_t depth, CNode *pres)
+static int CNode_poll_ac(CScope *scope, const char *sep, CNodeOp *fun, const char *par, int *is_done, size_t depth, CNode *pres)
 {
 	CNodeOp res = CNodeOp_init(COperator_init(COPERATOR_NONE));	// just a buffer to put temporary tokens, at the end it should contain only one node (which is our response)
-	CNodeOp fun = CNodeOp_init(COperator_procCall_create(proc_name));  // used if is_proc
 	CToken cur;
 	CNode to_add;
 	int is_last_identifier = 0;
 	int is_last_op = 0;
 	int has_comma;
-	char *sub_proc_name;
 	const char *rpars[] = {")", "]", NULL};
 	COperatorType op_type;
 	CType type;
@@ -587,12 +749,12 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 			break;
 		}
 		has_comma = 0;
-		if (proc_name != NULL)
+		if (fun != NULL)
 			if (CToken_streq(cur, ",")) {
 				if (!CNodeOp_stripToNode(scope, &res, &to_add))
 					goto CNode_poll_ac_err;
 				res = CNodeOp_init(COperator_init(COPERATOR_NONE));
-				CNodeOp_addNode(&fun, to_add);
+				CNodeOp_addNode(fun, to_add);
 				CStream_forward(scope->stream);
 				has_comma = 1;
 			}
@@ -611,24 +773,25 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 						goto CNode_poll_ac_err;
 					}
 					if (!CToken_streq(cur, ")")) {
-						printf_error(CStream_lastCtx(scope->stream), "expected ) to end type cast");
+						printf_error(cur.ctx, "expected ) to end type cast");
 						goto CNode_poll_ac_err;
 					}
 				} else {
-					if (is_last_identifier) {
-						sub_proc_name = strdup(((CNodeValue*)res.node[res.nodeCount - 1].data)->token.str);
-						CNodeOp_removeLast(&res);
-					} else
-						sub_proc_name = NULL;
-					if (!CNode_poll_ac(scope, sep, sub_proc_name, ")", is_done, depth + 1, &to_add)) {
-						free(sub_proc_name);
-						goto CNode_poll_ac_err;
+					if (!is_last_op && res.nodeCount > 0) {
+						to_add = res.node[res.nodeCount - 1];
+						res.node[res.nodeCount - 1] = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(COPERATOR_PROC_CALL))));
+						CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
+						if (!CNode_poll_ac(scope, sep, res.node[res.nodeCount - 1].data, ")", is_done, depth + 1, &to_add))
+							goto CNode_poll_ac_err;
+					} else {
+						if (!CNode_poll_ac(scope, sep, NULL, ")", is_done, depth + 1, &to_add))
+							goto CNode_poll_ac_err;
+						CNodeOp_addNode(&res, to_add);
 					}
-					free(sub_proc_name);
-					CNodeOp_addNode(&res, to_add);
 				}
 			} else if (CToken_streq(cur, "[")) {
 				CStream_forward(scope->stream);
+
 				if (res.nodeCount == 0) {
 					printf_error(cur.ctx, "expected a token before [ for array subscripting");
 					goto CNode_poll_ac_err;
@@ -677,28 +840,25 @@ static int CNode_poll_ac(CScope *scope, const char *sep, const char *proc_name, 
 				CNodeOp_addNode(&res, to_add);
 			}
 		}
-		if (cur.type == CTOKEN_BASIC) {
+		is_last_op = CNode_isRawOperator(res.node[res.nodeCount - 1]);
+		if (cur.type == CTOKEN_BASIC)
 			is_last_identifier = str_is_identifier(cur.str);
-			is_last_op = CToken_streq_in(cur, c_op);
-		} else {
+		else
 			is_last_identifier = 0;
-			is_last_op = 0;
-		}
 	}
-	if (proc_name != NULL) {
-		if (!CNodeOp_stripToNode(scope, &res, &to_add))
-			goto CNode_poll_ac_err;
-		res = CNodeOp_init(COperator_init(COPERATOR_NONE));
-		CNodeOp_addNode(&fun, to_add);
-		if (!CNodeOp_stripToNode(scope, &fun, pres))
-			goto CNode_poll_ac_err;
+	if (fun != NULL) {
+		if (res.nodeCount > 0) {
+			if (!CNodeOp_stripToNode(scope, &res, &to_add))
+				goto CNode_poll_ac_err;
+			res = CNodeOp_init(COperator_init(COPERATOR_NONE));
+			CNodeOp_addNode(fun, to_add);
+		}
 	} else if (!CNodeOp_stripToNode(scope, &res, pres))
 		goto CNode_poll_ac_err;
 	return 1;
 
 CNode_poll_ac_err:
 	CNodeOp_destroy(res);
-	CNodeOp_destroy(fun);
 	return 0;
 }
 

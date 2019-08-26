@@ -100,6 +100,7 @@ int char_is_letter(char to_test);
 int char_is_digit(char to_test);
 int char_is_identifier(char to_test);
 int str_is_identifier(const char *str);
+int str_is_value(const char *str);
 
 
 int CScope_keywords_init(void);

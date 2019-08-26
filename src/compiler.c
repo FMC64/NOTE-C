@@ -346,6 +346,16 @@ int char_is_identifier(char to_test)
 	return char_is_letter(to_test) || char_is_digit(to_test) || (to_test == '_');
 }
 
+int str_is_value(const char *str)
+{
+	size_t i;
+
+	for (i = 0; str[i] != 0; i++)
+		if (!char_is_identifier(str[i]))
+			return 0;
+	return 1;
+}
+
 int str_is_identifier(const char *str)
 {
 	size_t i;
