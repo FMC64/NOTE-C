@@ -161,6 +161,20 @@ static int CNodeOp_tryPrintAsso(CNodeOp op)
 		printf("]");
 		return 1;
 	}
+	if (op.op.type == COPERATOR_TERNARY) {
+		if (op.nodeCount > 1) {
+			CNode_print(op.node[0]);
+			printf(" ? ");
+			CNode_print(op.node[1]);
+			printf(" : ");
+			CNode_print(op.node[2]);
+		} else {
+			printf(" ? ");
+			CNode_print(op.node[0]);
+			printf(" : ");
+		}
+		return 1;
+	}
 	for (i = 0; table[i].type != COPERATOR_NONE; i++)
 		if (table[i].type == op.op.type) {
 			printf("(");
@@ -325,6 +339,8 @@ static int CNode_isRawOperator(CNode node)
 
 	switch (node.type) {
 	case CNODE_OP:
+		if (((CNodeOp*)node.data)->op.type == COPERATOR_TERNARY)
+			return ((CNodeOp*)node.data)->nodeCount <= 1;
 		return ((CNodeOp*)node.data)->nodeCount == 0;
 	case CNODE_VALUE:
 		value = node.data;
@@ -553,6 +569,24 @@ static void CNodeOp_stripAssociative(CNodeOp *node_op, size_t op_ndx, COperator 
 	node_op->node[op_ndx - 1] = new_node;
 }
 
+static void CNodeOp_stripAssociativeNode(CNodeOp *node_op, size_t op_ndx)
+{
+	CNode new_node;
+	CNode buf;
+	size_t i;
+
+	CNodeOp_addNode(node_op->node[op_ndx].data, node_op->node[op_ndx - 1]);
+	CNodeOp_addNode(node_op->node[op_ndx].data, node_op->node[op_ndx + 1]);
+	new_node = node_op->node[op_ndx];
+	node_op->nodeCount -= 2;
+	for (i = op_ndx - 1; i < node_op->nodeCount; i++)
+		node_op->node[i] = node_op->node[i + 2];
+	node_op->node[op_ndx - 1] = new_node;
+	buf = ((CNodeOp*)node_op->node[op_ndx].data)->node[0];
+	((CNodeOp*)node_op->node[op_ndx].data)->node[0] = ((CNodeOp*)node_op->node[op_ndx].data)->node[1];
+	((CNodeOp*)node_op->node[op_ndx].data)->node[1] = buf;
+}
+
 static int CNodeOp_stripAssociatives(CNodeOp *node_op, const COperatorType_Binding *bindings, int is_norm)
 {
 	size_t i;
@@ -570,6 +604,29 @@ static int CNodeOp_stripAssociatives(CNodeOp *node_op, const COperatorType_Bindi
 				CNodeOp_stripAssociative(node_op, i, op);
 				i -= 2;
 			}
+		}
+	}
+	return 1;
+}
+
+static int CNodeOp_stripAssociativeTernaries(CNodeOp *node_op)
+{
+	size_t i;
+	size_t i_norm;
+	CNodeOp *op;
+
+	for (i_norm = 0; i_norm < node_op->nodeCount; i_norm++) {
+		i = node_op->nodeCount - 1 - i_norm;
+		if (node_op->node[i].type == CNODE_OP) {
+			if (!CNode_isRawOperator(node_op->node[i]))
+				continue;
+			op = node_op->node[i].data;
+			if (op->op.type != COPERATOR_TERNARY)
+				continue;
+			if (!CNodeOp_isAssociativeValid(node_op, i))
+				return 0;
+			CNodeOp_stripAssociativeNode(node_op, i);
+			i -= 2;
 		}
 	}
 	return 1;
@@ -665,6 +722,8 @@ static int CNodeOp_stripToNode(CScope *scope, CNodeOp *op, CNode *pres)	// evalu
 		return 0;
 	if (!CNodeOp_stripAssociatives(op, lv12, 1))
 		return 0;
+	if (!CNodeOp_stripAssociativeTernaries(op))
+		return 0;
 	if (!CNodeOp_stripAssociatives(op, lv14, 0))
 		return 0;
 	if (!CNodeOp_stripAssociatives(op, lv15, 1))
@@ -729,11 +788,12 @@ static int CNode_poll_ac(CScope *scope, const char *sep, CNodeOp *fun, const cha
 {
 	CNodeOp res = CNodeOp_init(COperator_init(COPERATOR_NONE));	// just a buffer to put temporary tokens, at the end it should contain only one node (which is our response)
 	CToken cur;
+	CNode to_add_buf;
 	CNode to_add;
 	int is_last_identifier = 0;
 	int is_last_op = 0;
 	int has_comma;
-	const char *rpars[] = {")", "]", NULL};
+	const char *rpars[] = {")", "]", ":", NULL};
 	COperatorType op_type;
 	CType type;
 
@@ -802,6 +862,14 @@ static int CNode_poll_ac(CScope *scope, const char *sep, CNodeOp *fun, const cha
 				if (!CNode_poll_ac(scope, sep, NULL, "]", is_done, depth + 1, &to_add))
 					goto CNode_poll_ac_err;
 				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
+			} else if (CToken_streq(cur, "?")) {
+				CStream_forward(scope->stream);
+
+				if (!CNode_poll_ac(scope, sep, NULL, ":", is_done, depth + 1, &to_add_buf))
+					goto CNode_poll_ac_err;
+				to_add = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(COPERATOR_TERNARY))));
+				CNodeOp_addNode(to_add.data, to_add_buf);
+				CNodeOp_addNode(&res, to_add);
 			} else if (!is_last_op && res.nodeCount > 0 && CToken_to_unaryOp(cur, &op_type)) {
 				CStream_forward(scope->stream);
 				to_add = res.node[res.nodeCount - 1];
