@@ -73,6 +73,7 @@ static CNode CNode_init(CNodeType type, void *data)
 
 	res.type = type;
 	res.data = data;
+	res.tokens = uinterval_null();
 	return res;
 }
 
@@ -105,6 +106,38 @@ static void CNodeOp_addNode(CNodeOp *op, CNode to_add)
 static void CNodeOp_removeLast(CNodeOp *op)
 {
 	CNode_destroy(op->node[--op->nodeCount]);
+}
+
+static int CNodeOp_at(CNodeOp *op, size_t ndx, CNode *pres)
+{
+	if (ndx < op->nodeCount) {
+		if (pres != NULL)
+			*pres = op->node[ndx];
+		return 1;
+	} else
+		return 0;
+}
+
+static uinterval CNodeOp_interval(CNodeOp *op)
+{
+	uinterval res = uinterval_null();
+	size_t i;
+
+	for (i = 0; i < op->nodeCount; i++)
+		res = uinterval_merge(res, op->node[i].tokens);
+	return res;
+}
+
+static uinterval CNodeOp_associationInterval(CNodeOp *op, size_t op_ndx)
+{
+	uinterval res = op->node[op_ndx].tokens;
+	CNode node;
+
+	if (CNodeOp_at(op, op_ndx - 1, &node))
+		res = uinterval_merge(res, node.tokens);
+	if (CNodeOp_at(op, op_ndx + 1, &node))
+		res = uinterval_merge(res, node.tokens);
+	return res;
 }
 
 static int CNodeOp_tryPrintAsso(CNodeOp op)
@@ -257,16 +290,6 @@ static void CNodeOp_print(CNodeOp op)
 	}
 }
 
-static int CNodeOp_at(CNodeOp *op, size_t ndx, CNode *pres)
-{
-	if (ndx < op->nodeCount) {
-		if (pres != NULL)
-			*pres = op->node[ndx];
-		return 1;
-	} else
-		return 0;
-}
-
 static void CNodeOp_destroy(CNodeOp op)
 {
 	size_t i;
@@ -301,6 +324,13 @@ static void CNodeValue_print(CNodeValue value)
 static void CNodeValue_destroy(CNodeValue value)
 {
 	CToken_destroyCtx(value.token);
+}
+
+static void CNode_refreshInterval(CNode *node)
+{
+	if (node->type != CNODE_OP)
+		return;
+	node->tokens = CNodeOp_interval(node->data);
 }
 
 void CNode_destroy(CNode node)
@@ -415,6 +445,7 @@ static void CNodeOp_stripUnary(CNodeOp *node_op, size_t op_ndx, COperator op)
 	CNode_destroy(node_op->node[op_ndx]);
 	for (i = op_ndx; i < node_op->nodeCount; i++)
 		node_op->node[i] = node_op->node[i + 1];
+	CNode_refreshInterval(&new_node);
 	node_op->node[op_ndx] = new_node;
 }
 
@@ -471,7 +502,7 @@ static int CNodeOp_isUnarySizeofValid(CNodeOp *op, size_t ndx)
 }
 
 
-static int CNodeOp_stripUnaries_lv2_custom(CNodeOp *node_op, const COperatorType_Binding *bindings)
+static int CNodeOp_stripUnaries_lv2_custom(CScope *scope, CNodeOp *node_op, const COperatorType_Binding *bindings)
 {
 	size_t i;
 	size_t i_norm;
@@ -524,16 +555,16 @@ static int CNodeOp_stripUnaries_lv2_custom(CNodeOp *node_op, const COperatorType
 	return 1;
 }
 
-static int CNodeOp_isAssociativePartValid(CNodeOp *op, size_t ndx, const char *rel, const char *op_str, CContext ctx)
+static int CNodeOp_isAssociativePartValid(CScope *scope, CNodeOp *op, size_t ndx, const char *rel, const char *op_str, uinterval ctx)
 {
 	CNode node;
 
 	if (!CNodeOp_at(op, ndx, &node)) {
-		printf_error(ctx, "expected value on %s of operator %s", rel, op_str);
+		printf_error_uinterval(scope, ctx, "expected value on %s of operator %s", rel, op_str);
 		return 0;
 	}
 	if (CNode_isRawOperator(node)) {
-		printf_error_part(ctx, "expected valid value on %s of operator %s\ngot: ", rel, op_str);
+		printf_error_uinterval_part(scope, ctx, "expected valid value on %s of operator %s\ngot: ", rel, op_str);
 		CNode_print(node);
 		printf("\n\n");
 		return 0;
@@ -541,21 +572,23 @@ static int CNodeOp_isAssociativePartValid(CNodeOp *op, size_t ndx, const char *r
 	return 1;
 }
 
-static int CNodeOp_isAssociativeValid(CNodeOp *op, size_t ndx)
+static int CNodeOp_isAssociativeValid(CScope *scope, CNodeOp *op, size_t ndx)
 {
 	const char *str;
-	CContext ctx;
+	uinterval ctx = CNodeOp_associationInterval(op, ndx);
 
-	str = ((CNodeValue*)op->node[ndx].data)->token.str;
-	ctx = ((CNodeValue*)op->node[ndx].data)->token.ctx;
-	if (!CNodeOp_isAssociativePartValid(op, ndx - 1, "left", str, ctx))
+	if (op->node[ndx].type == CNODE_VALUE)
+		str = ((CNodeValue*)op->node[ndx].data)->token.str;
+	else
+		str = "ternary";
+	if (!CNodeOp_isAssociativePartValid(scope, op, ndx - 1, "left", str, ctx))
 		return 0;
-	if (!CNodeOp_isAssociativePartValid(op, ndx + 1, "right", str, ctx))
+	if (!CNodeOp_isAssociativePartValid(scope, op, ndx + 1, "right", str, ctx))
 		return 0;
 	return 1;
 }
 
-static void CNodeOp_stripAssociative(CNodeOp *node_op, size_t op_ndx, COperator op)
+static void CNodeOp_stripAssociative(CScope *scope, CNodeOp *node_op, size_t op_ndx, COperator op)
 {
 	CNode new_node = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(op)));
 	size_t i;
@@ -566,10 +599,11 @@ static void CNodeOp_stripAssociative(CNodeOp *node_op, size_t op_ndx, COperator 
 	CNode_destroy(node_op->node[op_ndx]);
 	for (i = op_ndx - 1; i < node_op->nodeCount; i++)
 		node_op->node[i] = node_op->node[i + 2];
+	CNode_refreshInterval(&new_node);
 	node_op->node[op_ndx - 1] = new_node;
 }
 
-static void CNodeOp_stripAssociativeNode(CNodeOp *node_op, size_t op_ndx)
+static void CNodeOp_stripAssociativeNode(CScope *scope, CNodeOp *node_op, size_t op_ndx)
 {
 	CNode new_node;
 	CNode buf;
@@ -585,9 +619,10 @@ static void CNodeOp_stripAssociativeNode(CNodeOp *node_op, size_t op_ndx)
 	buf = ((CNodeOp*)node_op->node[op_ndx].data)->node[0];
 	((CNodeOp*)node_op->node[op_ndx].data)->node[0] = ((CNodeOp*)node_op->node[op_ndx].data)->node[1];
 	((CNodeOp*)node_op->node[op_ndx].data)->node[1] = buf;
+	CNode_refreshInterval(&node_op->node[op_ndx]);
 }
 
-static int CNodeOp_stripAssociatives(CNodeOp *node_op, const COperatorType_Binding *bindings, int is_norm)
+static int CNodeOp_stripAssociatives(CScope *scope, CNodeOp *node_op, const COperatorType_Binding *bindings, int is_norm)
 {
 	size_t i;
 	size_t i_norm;
@@ -599,17 +634,17 @@ static int CNodeOp_stripAssociatives(CNodeOp *node_op, const COperatorType_Bindi
 		if (node_op->node[i].type == CNODE_VALUE) {
 			value = node_op->node[i].data;
 			if (COperatorType_Binding_resolve(bindings, value->token, &op)) {
-				if (!CNodeOp_isAssociativeValid(node_op, i))
+				if (!CNodeOp_isAssociativeValid(scope, node_op, i))
 					return 0;
-				CNodeOp_stripAssociative(node_op, i, op);
-				i -= 2;
+				CNodeOp_stripAssociative(scope, node_op, i, op);
+				i_norm -= 2;
 			}
 		}
 	}
 	return 1;
 }
 
-static int CNodeOp_stripAssociativeTernaries(CNodeOp *node_op)
+static int CNodeOp_stripAssociativeTernaries(CScope *scope, CNodeOp *node_op)
 {
 	size_t i;
 	size_t i_norm;
@@ -623,10 +658,10 @@ static int CNodeOp_stripAssociativeTernaries(CNodeOp *node_op)
 			op = node_op->node[i].data;
 			if (op->op.type != COPERATOR_TERNARY)
 				continue;
-			if (!CNodeOp_isAssociativeValid(node_op, i))
+			if (!CNodeOp_isAssociativeValid(scope, node_op, i))
 				return 0;
-			CNodeOp_stripAssociativeNode(node_op, i);
-			i -= 2;
+			CNodeOp_stripAssociativeNode(scope, node_op, i);
+			i_norm -= 2;
 		}
 	}
 	return 1;
@@ -700,51 +735,46 @@ static int CNodeOp_stripToNode(CScope *scope, CNodeOp *op, CNode *pres)	// evalu
 		{NULL, COPERATOR_NONE}};
 	size_t i;
 
-	if (!CNodeOp_stripUnaries_lv2_custom(op, lv2))
+	if (!CNodeOp_stripUnaries_lv2_custom(scope, op, lv2))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv3, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv3, 1))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv4, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv4, 1))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv5, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv5, 1))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv6, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv6, 1))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv7, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv7, 1))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv8, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv8, 1))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv9, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv9, 1))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv10, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv10, 1))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv11, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv11, 1))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv12, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv12, 1))
 		return 0;
-	if (!CNodeOp_stripAssociativeTernaries(op))
+	if (!CNodeOp_stripAssociativeTernaries(scope, op))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv14, 0))
+	if (!CNodeOp_stripAssociatives(scope, op, lv14, 0))
 		return 0;
-	if (!CNodeOp_stripAssociatives(op, lv15, 1))
+	if (!CNodeOp_stripAssociatives(scope, op, lv15, 1))
 		return 0;
 	if (op->nodeCount == 0) {
 		printf_error(CStream_atCtx(scope->stream), "nothing to evaluate here");
 		return 0;
 	}
 	if (op->nodeCount > 1) {
-		printf_error_part(CStream_atCtx(scope->stream), "invalid expression: operators probably missing:\n");	// TODO: print all excess nodes to help programmer figuring out what's wrong
-		for (i = 0; i < op->nodeCount; i++) {
-			printf("{");
-			CNode_print(op->node[i]);
-			printf("}");
-		}
-		printf("\n\n");
+		printf_error_uinterval(scope, CNodeOp_interval(op), "invalid expression: operators probably missing");
 		return 0;
 	}
 	*pres = op->node[0];
 	op->nodeCount--;
 	CNodeOp_destroy(*op);
+	CNode_refreshInterval(pres);
 	return 1;
 }
 
@@ -793,6 +823,7 @@ static int CNode_poll_ac(CScope *scope, const char *sep, CNodeOp *fun, const cha
 	int is_last_identifier = 0;
 	int is_last_op = 0;
 	int has_comma;
+	size_t node_start = CStream_atNum(scope->stream);
 	const char *rpars[] = {")", "]", ":", NULL};
 	COperatorType op_type;
 	CType type;
@@ -813,20 +844,25 @@ static int CNode_poll_ac(CScope *scope, const char *sep, CNodeOp *fun, const cha
 			if (CToken_streq(cur, ",")) {
 				if (!CNodeOp_stripToNode(scope, &res, &to_add))
 					goto CNode_poll_ac_err;
+				to_add.tokens.start = node_start;
+				to_add.tokens.end = CStream_atNum(scope->stream);
 				res = CNodeOp_init(COperator_init(COPERATOR_NONE));
 				CNodeOp_addNode(fun, to_add);
 				CStream_forward(scope->stream);
 				has_comma = 1;
+				node_start = CStream_atNum(scope->stream);
 			}
 		if (!has_comma) {
 			if (CToken_streq(cur, "(")) {
 				CStream_forward(scope->stream);
 				if (CStream_atIsType(scope)) {
 					to_add = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(COPERATOR_CAST))));
+					to_add.tokens.start = CStream_atNum(scope->stream) - 1;
 					((CNodeOp*)to_add.data)->op.ctx = CContext_dup(CStream_atCtx(scope->stream));
 					if (!CType_parse(scope, &type))
 						goto CNode_poll_ac_err;
 					((CNodeOp*)to_add.data)->op.data = CType_alloc(type);
+					to_add.tokens.end = CStream_atNum(scope->stream) + 2;
 					CNodeOp_addNode(&res, to_add);
 					if (!CStream_poll(scope->stream, &cur)) {
 						printf_error(CStream_lastCtx(scope->stream), "expected ) to end type cast");
@@ -843,9 +879,13 @@ static int CNode_poll_ac(CScope *scope, const char *sep, CNodeOp *fun, const cha
 						CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
 						if (!CNode_poll_ac(scope, sep, res.node[res.nodeCount - 1].data, ")", is_done, depth + 1, &to_add))
 							goto CNode_poll_ac_err;
+						res.node[res.nodeCount - 1].tokens.end = CStream_atNum(scope->stream) + 1;
 					} else {
+						node_start = CStream_atNum(scope->stream) - 1;
 						if (!CNode_poll_ac(scope, sep, NULL, ")", is_done, depth + 1, &to_add))
 							goto CNode_poll_ac_err;
+						to_add.tokens.start = node_start;
+						to_add.tokens.end = CStream_atNum(scope->stream) + 1;
 						CNodeOp_addNode(&res, to_add);
 					}
 				}
@@ -859,20 +899,26 @@ static int CNode_poll_ac(CScope *scope, const char *sep, CNodeOp *fun, const cha
 				to_add = res.node[res.nodeCount - 1];
 				res.node[res.nodeCount - 1] = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(COPERATOR_ARRAY))));
 				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
+				res.node[res.nodeCount - 1].tokens.start = CStream_atNum(scope->stream) - 1;
 				if (!CNode_poll_ac(scope, sep, NULL, "]", is_done, depth + 1, &to_add))
 					goto CNode_poll_ac_err;
 				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
+				res.node[res.nodeCount - 1].tokens.end = CStream_atNum(scope->stream) + 1;
 			} else if (CToken_streq(cur, "?")) {
 				CStream_forward(scope->stream);
 
+				to_add = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(COPERATOR_TERNARY))));
+				to_add.tokens.start = CStream_atNum(scope->stream) - 1;
 				if (!CNode_poll_ac(scope, sep, NULL, ":", is_done, depth + 1, &to_add_buf))
 					goto CNode_poll_ac_err;
-				to_add = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(COPERATOR_TERNARY))));
 				CNodeOp_addNode(to_add.data, to_add_buf);
+				to_add.tokens.end = CStream_atNum(scope->stream) + 1;
 				CNodeOp_addNode(&res, to_add);
 			} else if (!is_last_op && res.nodeCount > 0 && CToken_to_unaryOp(cur, &op_type)) {
 				CStream_forward(scope->stream);
 				to_add = res.node[res.nodeCount - 1];
+				to_add.tokens.start = CStream_atNum(scope->stream) - 1;
+				to_add.tokens.end = CStream_atNum(scope->stream) + 1;
 				res.node[res.nodeCount - 1] = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(op_type))));
 				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
 			} else if (CToken_to_assoOp(cur, &op_type)) {
@@ -892,6 +938,8 @@ static int CNode_poll_ac(CScope *scope, const char *sep, CNodeOp *fun, const cha
 					goto CNode_poll_ac_err;
 				}
 				to_add = res.node[res.nodeCount - 1];
+				to_add.tokens.start = CStream_atNum(scope->stream) - 2;
+				to_add.tokens.end = CStream_atNum(scope->stream) + 1;
 				res.node[res.nodeCount - 1] = CNode_init(CNODE_OP, CNodeOp_alloc(CNodeOp_init(COperator_init(op_type))));
 				CNodeOp_addNode(res.node[res.nodeCount - 1].data, to_add);
 				((CNodeOp*)res.node[res.nodeCount - 1].data)->op.data = strdup(cur.str);
@@ -904,6 +952,8 @@ static int CNode_poll_ac(CScope *scope, const char *sep, CNodeOp *fun, const cha
 				break;
 			} else {
 				to_add = CNode_init(CNODE_VALUE, CNodeValue_alloc(CNodeValue_create(cur)));
+				to_add.tokens.start = CStream_atNum(scope->stream);
+				to_add.tokens.end = CStream_atNum(scope->stream) + 1;
 				CStream_forward(scope->stream);
 				CNodeOp_addNode(&res, to_add);
 			}

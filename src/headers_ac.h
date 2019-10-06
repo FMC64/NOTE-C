@@ -31,6 +31,7 @@ typedef signed long ssize_t;
 #include "struct.h"
 
 #include "malloc.h"
+#include "mat.h"
 #include "context.h"
 #include "memcheck.h"
 #include "string.h"

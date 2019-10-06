@@ -86,10 +86,12 @@ int CStream_poll(CStream *stream, CToken *pres);
 int CStream_pollRev(CStream *stream, CToken *pres);
 CContext CStream_lastCtx(CStream *stream);
 CContext CStream_atCtx(CStream *stream);
+CContext StreamCToken_polledCtx(StreamCToken *stream);
 int CStream_pollStr(CStream *stream, const char *str, CContext *ctx);
 int CStream_pollLpar(CStream *stream, CContext *ctx);
 int CStream_pollRpar(CStream *stream, CContext *ctx);
-
+size_t CStream_atNum(CStream *stream);
+void CStream_printInterval(CStream **stream, uinterval inter);
 
 CBuf CBuf_init(char *input_path);
 int CBuf_readTokens(CBuf *buf);

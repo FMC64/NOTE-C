@@ -31,6 +31,7 @@ typedef struct {
 typedef struct {
 	VecCToken vec;
 	size_t i;
+	size_t flushed_count;
 } StreamCToken;
 
 typedef struct {
@@ -70,6 +71,7 @@ typedef struct {
 } VecCMacroStackFrame;
 
 typedef struct {
+	char *filepath;
 	StreamCToken tokens;
 	VecCToken buf;
 	VecCFile streams;
@@ -355,6 +357,7 @@ typedef enum {
 typedef struct {
 	CNodeType type;
 	void *data;
+	uinterval tokens;	// tokens enclosing the node
 } CNode;
 
 typedef struct {

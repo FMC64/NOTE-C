@@ -92,6 +92,37 @@ int printf_error_symbol_redef(const char *name, CSymbol had, CSymbol got, CConte
 	return printf("\n\n");
 }
 
+int printf_error_uinterval(CScope *scope, uinterval ctx, const char *fmt, ...)
+{
+	char buf[1024];
+	va_list args;
+	int res;
+
+	printf("error: ");
+	CStream_printInterval(&scope->stream, ctx);
+	va_start(args, fmt);
+	res = vsprintf(buf, fmt, args);
+	va_end(args);
+	buf_append(buf);
+	printf("\n\n");
+	return res;
+}
+
+int printf_error_uinterval_part(CScope *scope, uinterval ctx, const char *fmt, ...)
+{
+	char buf[1024];
+	va_list args;
+	int res;
+
+	printf("error: ");
+	CStream_printInterval(&scope->stream, ctx);
+	va_start(args, fmt);
+	res = vsprintf(buf, fmt, args);
+	va_end(args);
+	buf_append(buf);
+	return res;
+}
+
 void terminal_show(void)
 {
 	ssize_t x = 0;

@@ -94,7 +94,7 @@ int CFile_pollFileBytes(CFile *stream, size_t buf_start, size_t size)
 
 	got = Bfile_ReadFile(stream->filehandle, &stream->buf[buf_start], size, -1);
 	if (got < 0) {
-		printf_error(CContext_init(stream->filepath, 0, 0), "file cannot be read: %s", IML_FILLEERR_str(got));
+		printf_error(CContext_init(stream->filepath, 0, 0), "file %s cannot be read: %s", stream->filepath, IML_FILLEERR_str(got));
 		return 0;
 	}
 	stream->buf[buf_start + got] = 0;
@@ -110,7 +110,7 @@ void CFile_destroy(CFile stream)
 	int status = Bfile_CloseFile(stream.filehandle);
 
 	if (status < 0)
-		printf_error(CContext_init(stream.filepath, 0, 0), "file cannot be closed: %s", IML_FILLEERR_str(status));
+		printf_error(CContext_init(stream.filepath, 0, 0), "file %s cannot be closed: %s", stream.filepath, IML_FILLEERR_str(status));
 	free(stream.filepath);
 	free(stream.buf);
 }
@@ -204,6 +204,7 @@ int CStream_create(const char *filepath, CStream **pres)
 	if (!CFile_create(filepath, &file))
 		return 0;
 	res = (CStream*)malloc(sizeof(CStream));
+	res->filepath = strdup(filepath);
 	res->tokens = StreamCToken_init(VecCToken_init());
 	res->buf = VecCToken_init();
 	res->streams = VecCFile_init();
@@ -217,6 +218,7 @@ int CStream_create(const char *filepath, CStream **pres)
 
 void CStream_destroy(CStream *stream)
 {
+	free(stream->filepath);
 	StreamCToken_destroy(stream->tokens);
 	VecCToken_destroy(stream->buf);
 	VecCFile_destroy(stream->streams);
@@ -354,7 +356,7 @@ static void VecCToken_mergeStrings(VecCToken *vec)
 		}
 }
 
-// Token batches are ended by a ; or {
+// Token batches are ended by a ;
 int CStream_nextBatch(CStream *stream)
 {
 	CToken cur;
@@ -402,11 +404,13 @@ StreamCToken StreamCToken_init(VecCToken vec)
 
 	res.vec = vec;
 	res.i = 0;
+	res.flushed_count = 0;
 	return res;
 }
 
 void StreamCToken_flush(StreamCToken *stream)
 {
+	stream->flushed_count += stream->vec.count;
 	VecCToken_flush(&stream->vec);
 	stream->i = 0;
 }
@@ -586,4 +590,51 @@ int CStream_pollLpar(CStream *stream, CContext *ctx)
 int CStream_pollRpar(CStream *stream, CContext *ctx)
 {
 	return StreamCToken_pollRpar(&stream->tokens, ctx);
+}
+
+size_t CStream_atNum(CStream *stream)
+{
+	return stream->tokens.flushed_count + stream->tokens.i;
+}
+
+static void CStream_rewindFile(CStream **stream)
+{
+	const char *path = strdup((*stream)->filepath);
+
+	CStream_destroy(*stream);
+	if (!CStream_create(path, stream)) {
+		printf("can't rewind file %s\n", path);
+		free(path);
+		exit(1);
+	}
+	free(path);
+	CStream_nextBatch(*stream);
+}
+
+void CStream_printInterval(CStream **stream, uinterval inter)
+{
+	CToken cur;
+	int has_found = 0;
+	size_t num;
+
+	CStream_rewindFile(stream);
+	while (num = CStream_atNum(*stream), CStream_poll(*stream, &cur)) {
+		if (uinterval_isInside(inter, num)) {
+			if (!has_found) {
+				CContext_print(cur.ctx);
+				printf("=> ");
+				has_found = 1;
+			}
+			CToken_print(cur);
+			printf(" ");
+		} else if (has_found) {
+			printf("<=\n");
+			return;
+		}
+		if (CToken_streq(cur, ";"))
+			if (!CStream_nextBatch(*stream)) {
+				printf("[batch error while rewinding the file to print the interval]");
+				return;
+			}
+	}
 }
